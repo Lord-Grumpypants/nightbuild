@@ -1,0 +1,118 @@
+project("NightBuild")
+
+default = [
+    "nightbuild",
+    "test",
+]
+
+executable("nightbuild"):
+    toolchain_include = [
+        "toolchains/OBJCXX.json",
+        "toolchains/CXX.json",
+    ]
+
+    sources = [
+        "src/main.cpp",
+        "src/cli.cpp",
+        "src/toml.cpp",
+        "src/tui.cpp",
+        "src/scheduler.cpp",
+        "src/fsevents.cpp",
+        "src/compile_commands.cpp",
+    ]
+
+    include_dirs = [
+        "include",
+    ]
+
+    cflags = [
+        "-std=c++23",
+        "-O3",
+        "-march=native",
+        "-mtune=native",
+        "-flto=full",
+        "-fstrict-aliasing",
+        "-fomit-frame-pointer",
+        "-fwhole-program-vtables",
+        "-fvirtual-function-elimination",
+        "-fstrict-vtable-pointers",
+        "-fprofile-instr-use=nightbuild.profdata",
+        "-Wno-profile-instr-unprofiled",
+    ]
+
+    pkg_config = [
+        "notcurses",
+    ]
+
+    ldflags = [
+        "-flto=full",
+        "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
+        "-fprofile-instr-use=nightbuild.profdata",
+        "-Wl,--icf=safe",
+    ]
+
+    library_dirs = []
+
+    libraries = []
+
+    frameworks = [
+        "CoreServices",
+    ]
+
+
+executable("nightbuild-pgo"):
+    toolchain_include = [
+        "toolchains/CXX.json",
+    ]
+
+    sources = [
+        "src/main.cpp",
+        "src/cli.cpp",
+        "src/toml.cpp",
+        "src/tui.cpp",
+        "src/scheduler.cpp",
+        "src/fsevents.cpp",
+        "src/compile_commands.cpp",
+    ]
+
+    include_dirs = [
+        "include",
+    ]
+
+    cflags = [
+        "-std=c++23",
+        "-O3",
+        "-march=native",
+        "-mtune=native",
+        "-flto=full",
+        "-fstrict-aliasing",
+        "-fomit-frame-pointer",
+        "-fprofile-instr-generate",
+    ]
+
+    pkg_config = [
+        "notcurses",
+    ]
+
+    ldflags = [
+        "-fprofile-instr-generate",
+        "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
+    ]
+
+    library_dirs = [
+        "/opt/homebrew/opt/llvm/lib/clang/23/lib/darwin",
+    ]
+
+    libraries = [
+        "clang_rt.profile_osx",
+    ]
+
+    frameworks = [
+        "CoreServices",
+    ]
+
+
+executable("test"):
+    sources = [
+        "tests/main.cpp",
+    ]

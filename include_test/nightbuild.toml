@@ -1,0 +1,9 @@
+include = ["core.toml"]
+
+[project]
+name = "include_test"
+
+[target.hello]
+type = "executable"
+sources = ["main.cpp"]
+dependencies = ["core"]

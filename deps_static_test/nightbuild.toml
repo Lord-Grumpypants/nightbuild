@@ -1,0 +1,17 @@
+[project]
+name = "DepsStaticTest"
+
+[target.hello]
+type = "static_lib"
+sources = [
+    "hello.cpp",
+]
+
+[target.test]
+type = "executable"
+sources = [
+    "main.cpp",
+]
+dependencies = [
+    "hello",
+]

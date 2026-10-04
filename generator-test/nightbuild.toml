@@ -1,0 +1,14 @@
+[project]
+name = "GeneratorTest"
+
+[target.lemon]
+type = "generator"
+sources = ["lemon.cpp"]
+action = ["--generate", "parser.cpp"]
+output = "parser.cpp"
+
+[target.main]
+type = "executable"
+sources = ["main.cpp", "parser.cpp"]
+cxxflags = ["-std=c++23"]
+generator_deps = ["lemon"]

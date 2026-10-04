@@ -1,0 +1,9 @@
+{
+  "name": "Objective-C++",
+  "extension": ".mm",
+  "compiler": "clang++",
+  "flags_key": "objcxxflags",
+  "dep_flag": "-MMD -MF",
+  "description": "OBJCXX",
+  "output_extension": ".o"
+}

@@ -1,0 +1,9 @@
+{
+    "name": "Homebrew LLVM C/C++",
+    "extension": ".cpp",
+    "compiler": "/opt/homebrew/opt/llvm/bin/clang++",
+    "flags_key": "cxxflags",
+    "dependency_flags": ["-MMD", "-MP"],
+    "description": "CXX",
+    "output_extension": ".o"
+}

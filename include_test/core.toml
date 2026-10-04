@@ -1,0 +1,4 @@
+[target.core]
+type = "static_lib"
+sources = ["core.cpp"]
+output = "libcore_changed.a"
