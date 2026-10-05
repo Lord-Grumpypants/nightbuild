@@ -2,8 +2,11 @@
 
 build/
 out/
-samu-build/
-ninja-build/
+samu-build/obj/
+samu-build/nightbuild
+ninja-build/obj/
+ninja-build/nightbuild
+
 bootstrap/
 
 *.o

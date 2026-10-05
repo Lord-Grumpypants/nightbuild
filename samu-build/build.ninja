@@ -1,0 +1,25 @@
+cxx = clang++
+
+cxxflags = -std=c++23 -O3 -march=native -mtune=native -flto=full -fstrict-aliasing -fomit-frame-pointer -Iinclude -I/opt/homebrew/Cellar/notcurses/3.0.17_1/include -D_DARWIN_C_SOURCE
+ldflags = -O3 -march=native -mtune=native -flto=full
+libs = -L/opt/homebrew/Cellar/notcurses/3.0.17_1/lib -lnotcurses -lnotcurses-core -framework CoreServices
+
+rule cxx
+  command = $cxx $cxxflags -MMD -MF $out.d -c $in -o $out
+  depfile = $out.d
+  deps = gcc
+
+rule link
+  command = $cxx $ldflags $in $libs -o $out
+
+build obj/main.o: cxx ../src/main.cpp
+build obj/cli.o: cxx ../src/cli.cpp
+build obj/scheduler.o: cxx ../src/scheduler.cpp
+build obj/toml.o: cxx ../src/toml.cpp
+build obj/tui.o: cxx ../src/tui.cpp
+build obj/fsevents.o: cxx ../src/fsevents.cpp
+build obj/compile_commands.o: cxx ../src/compile_commands.cpp
+
+build nightbuild: link obj/main.o obj/cli.o obj/scheduler.o obj/toml.o obj/tui.o obj/fsevents.o obj/compile_commands.o
+
+default nightbuild
