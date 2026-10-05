@@ -4,8 +4,12 @@ build/
 out/
 samu-build/obj/
 samu-build/nightbuild
+samu-build/.ninja_deps
+samu_build/.ninja_log
 ninja-build/obj/
 ninja-build/nightbuild
+ninja_build/.ninja_deps
+ninja_build/.ninja_log
 
 bootstrap/
 
