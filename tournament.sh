@@ -123,7 +123,9 @@ fi
 run_ninja() {
 rm -rf \
 "$NINJA_BUILD/obj" \
-"$NINJA_BUILD/nightbuild"
+"$NINJA_BUILD/nightbuild" \
+"$NINJA_BUILD/.ninja_log" \
+"$NINJA_BUILD/.ninja_deps"
 
 
 cold_start
@@ -147,7 +149,9 @@ fi
 run_samu() {
 rm -rf \
 "$SAMU_BUILD/obj" \
-"$SAMU_BUILD/nightbuild" 
+"$SAMU_BUILD/nightbuild" \
+"$SAMU_BUILD/.ninja_log" \
+"$SAMU_BUILD/.ninja_deps"
 
 
 cold_start
