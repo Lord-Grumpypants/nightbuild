@@ -11,6 +11,8 @@ ninja-build/nightbuild
 ninja-build/.ninja_deps
 ninja-build/.ninja_log
 
+recordings/
+
 bootstrap/
 
 *.o
