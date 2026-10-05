@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+<title>NightBuild — Build without the baggage</title>
+<meta name="description" content="NightBuild is a fast, native C++23 build system designed to stay out of your way.">
+
+<link rel="stylesheet" href="style.css">
+
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/asciinema-player@3.10.0/dist/bundle/asciinema-player.css">
+
+
+</head>
+
+<body>
+    <header class="nav">
+        <a class="brand" href="#">NightBuild</a>
+
+
+    <nav>
+        <a href="#features">Features</a>
+        <a href="#philosophy">Philosophy</a>
+        <a href="https://github.com/Lord-Grumpypants/nightbuild">GitHub</a>
+    </nav>
+</header>
+
+<main>
+    <section class="hero">
+        <p class="eyebrow">NIGHTFALL SOFTWARE</p>
+
+        <h1>Build without<br>the baggage.</h1>
+
+        <p class="tagline">
+            A fast, native C++23 build system designed to get
+            from source code to executable without getting in your way.
+        </p>
+
+        <div class="hero-actions">
+            <a class="button primary" href="#demo">See it build</a>
+            <a class="button secondary" href="https://github.com/Lord-Grumpypants/nightbuild">
+                View on GitHub
+            </a>
+        </div>
+    </section>
+
+    <section class="demo-section" id="demo">
+        <div class="section-heading">
+            <p class="eyebrow">REAL BUILD. REAL OUTPUT.</p>
+            <h2>NightBuild builds Ninja.</h2>
+            <p>
+                No animation. No simulated progress.
+                This is an actual NightBuild build of Ninja.
+            </p>
+        </div>
+
+        <div class="terminal">
+            <div id="demo-player"></div>
+        </div>
+
+        <div class="build-result">
+            <div>
+                <strong>36</strong>
+                <span>build commands</span>
+            </div>
+
+            <div>
+                <strong>35</strong>
+                <span>C++ sources</span>
+            </div>
+
+            <div>
+                <strong>1.14.0</strong>
+                <span>Ninja built</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="statement">
+        <p class="eyebrow">THE IDEA</p>
+
+        <h2>
+            Your build system shouldn't
+            become the project.
+        </h2>
+
+        <p>
+            NightBuild keeps the machinery small and the workflow direct.
+            Define your targets, generate the build database, and build.
+            That's the idea.
+        </p>
+    </section>
+
+    <section class="features" id="features">
+        <article>
+            <span class="feature-number">01</span>
+            <h3>Native</h3>
+            <p>
+                Written in C++23 and designed around native toolchains.
+                NightBuild is a build tool, not a layer of scripting
+                wrapped around one.
+            </p>
+        </article>
+
+        <article>
+            <span class="feature-number">02</span>
+            <h3>Parallel</h3>
+            <p>
+                Independent compilation work runs concurrently,
+                turning large source trees into a stream of useful
+                work instead of a queue.
+            </p>
+        </article>
+
+        <article>
+            <span class="feature-number">03</span>
+            <h3>Incremental</h3>
+            <p>
+                Rebuild what needs rebuilding. Leave everything else
+                alone. Keep iteration focused on the code you're
+                actually changing.
+            </p>
+        </article>
+
+        <article>
+            <span class="feature-number">04</span>
+            <h3>No IDE required</h3>
+            <p>
+                NightBuild lives comfortably in the terminal.
+                Use your editor, your shell, and your toolchain
+                without handing the build over to an IDE.
+            </p>
+        </article>
+
+        <article>
+            <span class="feature-number">05</span>
+            <h3>Direct</h3>
+            <p>
+                Build definitions describe targets and their inputs.
+                NightBuild turns them into commands without requiring
+                a sprawling build-language ecosystem.
+            </p>
+        </article>
+
+        <article>
+            <span class="feature-number">06</span>
+            <h3>Small machinery</h3>
+            <p>
+                The build system should support the project—not
+                become another project you have to maintain.
+            </p>
+        </article>
+    </section>
+
+    <section class="philosophy" id="philosophy">
+        <p class="eyebrow">PHILOSOPHY</p>
+
+        <h2>Less machinery.<br>More building.</h2>
+
+        <div class="comparison">
+            <div>
+                <span>Traditional setup</span>
+                <p>Configure.</p>
+                <p>Generate.</p>
+                <p>Regenerate.</p>
+                <p>Maintain the machinery.</p>
+            </div>
+
+            <div class="nightbuild-column">
+                <span>NightBuild</span>
+                <p>Define.</p>
+                <p>Generate.</p>
+                <p>Build.</p>
+                <p>Ship.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta">
+        <p class="eyebrow">READY WHEN YOU ARE</p>
+
+        <h2>Let the compiler<br>do the work.</h2>
+
+        <p>
+            NightBuild is built for developers who want their build
+            system to be infrastructure—not a hobby of its own.
+        </p>
+
+        <a class="button primary large"
+           href="https://github.com/Lord-Grumpypants/nightbuild">
+            Get NightBuild
+        </a>
+    </section>
+</main>
+
+<footer>
+    <span>NightBuild</span>
+    <span>Built by Nightfall</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.10.0/dist/bundle/asciinema-player.min.js"></script>
+
+<script>
+    AsciinemaPlayer.create(
+        "recordings/nightbuild-compile-ninja.cast",
+        document.getElementById("demo-player"),
+        {
+            autoPlay: false,
+            loop: true,
+            speed: 1,
+            theme: "asciinema",
+            fit: "width"
+        }
+    );
+</script>
+
+
+</body>
+</html>
