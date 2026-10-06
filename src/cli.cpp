@@ -26,6 +26,8 @@ Command parse_command(
 
     if (command == "gen")
         return Command::Gen;
+    if (command == "args")
+        return Command::Args;
 
     if (command == "build")
         return Command::Build;
@@ -95,8 +97,59 @@ CLIResult parse_cli(
         parse_command(first);
 
     /*
-     * gen has no target selection.
+     * args only accepts a build directory.
      */
+    if (result.command == Command::Args) {
+        bool found_directory = false;
+
+        for (int i = 2;
+             i < argc;
+             ++i) {
+            const std::string argument =
+                argv[i];
+
+            if (argument == "-C") {
+                if (found_directory) {
+                    usage_error(
+                        "multiple -C options");
+                }
+
+                if (i + 1 >= argc) {
+                    usage_error(
+                        "-C requires a directory");
+                }
+
+                result.directory =
+                    argv[++i];
+                found_directory = true;
+                continue;
+            }
+
+            if (argument == "-h" ||
+                argument == "--help") {
+                return {
+                    Command::Help,
+                    ".",
+                    false,
+                    false,
+                    {}
+                };
+            }
+
+            usage_error(
+                "unexpected argument '" +
+                argument +
+                "'");
+        }
+
+        if (!found_directory) {
+            usage_error(
+                "args requires -C <dir>");
+        }
+
+        return result;
+    }
+
     if (result.command == Command::Gen) {
 
         bool found_directory = false;

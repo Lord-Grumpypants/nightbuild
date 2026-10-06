@@ -5,6 +5,7 @@
 
 enum class Command {
     Gen,
+    Args,
     Build,
     Rebuild,
     Clean,

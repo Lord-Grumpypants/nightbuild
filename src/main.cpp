@@ -4570,7 +4570,8 @@ void generate(
 
     toml::Project project =
         toml::parse_file(
-            manifest.string());
+            manifest.string(),
+            paths.build);
 
     fs::create_directories(
         paths.build);
@@ -4668,7 +4669,8 @@ bool manifest_changed(
 
     toml::Project project =
         toml::parse_file(
-            manifest.string());
+            manifest.string(),
+            paths.build);
 
     std::ostringstream fingerprint;
 
@@ -5995,7 +5997,8 @@ int build(
                         (
                             paths.root /
                             "BUILD.nb"
-                        ).string());
+                        ).string(),
+                        paths.build);
 
                 write_file(
                     plist,
@@ -6143,7 +6146,8 @@ int build(
                     (
                         paths.root /
                         "BUILD.nb"
-                    ).string());
+                    ).string(),
+                    paths.build);
 
             write_file(
                 plist,
@@ -6226,7 +6230,8 @@ void clobber(
 
     toml::Project project =
         toml::parse_file(
-            manifest.string());
+            manifest.string(),
+            paths.build);
 
     std::error_code ec;
 
@@ -6358,6 +6363,19 @@ int main(
         print_version();
 
         return 0;
+
+    case Command::Args: {
+        fs::path build_dir =
+            fs::absolute(
+                cli.directory);
+        fs::path root =
+            fs::current_path();
+
+        generate(
+            root,
+            build_dir);
+        return 0;
+    }
 
     case Command::Gen: {
 

@@ -1,0 +1,22 @@
+project("ArgTest")
+
+default = [
+    "test",
+]
+
+declare_args("enabled"):
+    default = false
+
+executable("test"):
+    sources = [
+        "main.cpp",
+    ]
+
+    cflags = [
+        "-std=c++23",
+    ]
+
+    if enabled:
+        cflags += [
+            "-DARGS_TEST_ENABLED",
+        ]

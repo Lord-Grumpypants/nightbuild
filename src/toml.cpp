@@ -364,15 +364,33 @@ bool values_equal(
     return true;
 }
 
+struct ParserState {
+    std::unordered_map<std::string, Value> variables;
+    std::unordered_set<std::string> declared_args;
+    std::unordered_set<std::string> parsed_args;
+    std::unordered_set<std::string> overridden_args;
+    bool discovering_args = false;
+};
+
 struct Parser {
     fs::path path;
     std::vector<SourceLine> lines;
-    std::unordered_map<std::string, Value> variables;
+    std::unordered_map<std::string, Value>& variables;
+    std::unordered_set<std::string>& declared_args;
+    std::unordered_set<std::string>& parsed_args;
+    std::unordered_set<std::string>& overridden_args;
+    bool& discovering_args;
 
     explicit Parser(
         const fs::path& manifest,
-        const std::string& contents)
-        : path(manifest) {
+        const std::string& contents,
+        ParserState& state)
+        : path(manifest),
+          variables(state.variables),
+          declared_args(state.declared_args),
+          parsed_args(state.parsed_args),
+          overridden_args(state.overridden_args),
+          discovering_args(state.discovering_args) {
 
         std::istringstream input(contents);
         std::string physical;
@@ -1396,6 +1414,174 @@ struct Parser {
                 continue;
             }
 
+            if (text.rfind("declare_args(", 0) == 0 &&
+                text.back() == ':') {
+                const std::string declaration =
+                    call_name(
+                        text,
+                        line.number);
+
+                if (declaration != "declare_args") {
+                    error(
+                        line.number,
+                        "invalid declare_args declaration");
+                }
+
+                const std::string name =
+                    parse_string(
+                        call_argument(
+                            text,
+                            line.number),
+                        context(line.number));
+
+                if (!is_identifier(name)) {
+                    error(
+                        line.number,
+                        "invalid argument name '" +
+                        name +
+                        "'");
+                }
+
+                if (!discovering_args &&
+                    parsed_args.contains(name)) {
+                    error(
+                        line.number,
+                        "duplicate declared argument '" +
+                        name +
+                        "'");
+                }
+
+                if (!discovering_args) {
+                    parsed_args.insert(name);
+                }
+
+                const std::size_t child_start = i + 1;
+
+                if (child_start >= end ||
+                    lines[child_start].indent <= indent) {
+                    error(
+                        line.number,
+                        "declare_args requires a block");
+                }
+
+                const std::size_t child_end =
+                    block_end(
+                        child_start,
+                        end,
+                        indent);
+
+                declared_args.insert(name);
+
+                if (discovering_args) {
+                    std::size_t child = child_start;
+
+                    while (child < child_end) {
+                        const SourceLine& child_line =
+                            lines[child];
+
+                        const auto [property, operator_text] =
+                            assignment(
+                                child_line.text,
+                                child_line.number);
+
+                        if (property != "default") {
+                            error(
+                                child_line.number,
+                                "unknown declare_args property '" +
+                                property +
+                                "'");
+                        }
+
+                        if (operator_text != "=") {
+                            error(
+                                child_line.number,
+                                "declare_args default does not support +=");
+                        }
+
+                        const std::string initial_value =
+                            assignment_value(
+                                child_line.text,
+                                operator_text,
+                                child_line.number);
+
+                        const auto [complete_value, next] =
+                            collect_value(
+                                child,
+                                child_end,
+                                initial_value,
+                                child_line.number);
+
+                        variables[name] =
+                            parse_value(
+                                complete_value,
+                                child_line.number);
+
+                        child = next;
+                    }
+
+                    i = child_end;
+                    continue;
+                }
+
+                std::size_t child = child_start;
+                while (child < child_end) {
+                    const SourceLine& child_line =
+                        lines[child];
+
+                    if (child_line.indent !=
+                        lines[child_start].indent) {
+                        error(
+                            child_line.number,
+                            "unexpected indentation");
+                    }
+
+                    const auto [property, operator_text] =
+                        assignment(
+                            child_line.text,
+                            child_line.number);
+
+                    if (property != "default") {
+                        error(
+                            child_line.number,
+                            "unknown declare_args property '" +
+                            property +
+                            "'");
+                    }
+
+                    if (operator_text != "=") {
+                        error(
+                            child_line.number,
+                            "declare_args default does not support +=");
+                    }
+
+                    const std::string initial_value =
+                        assignment_value(
+                            child_line.text,
+                            operator_text,
+                            child_line.number);
+
+                    const auto [complete_value, next] =
+                        collect_value(
+                            child,
+                            child_end,
+                            initial_value,
+                            child_line.number);
+
+                    const Value value =
+                        parse_value(
+                            complete_value,
+                            child_line.number);
+
+                    if (!overridden_args.contains(name)) {
+                    variables[name] = value;
+                }
+                    child = next;
+                }
+
+                i = child_end;
+                continue;
+            }
+
             if (text.rfind("if ", 0) == 0 &&
                 text.back() == ':') {
 
@@ -1657,6 +1843,25 @@ struct Parser {
         }
     }
 
+    ParsedManifest discover_args() {
+        discovering_args = true;
+
+        ParsedManifest result;
+
+        if (!lines.empty()) {
+            parse_root_block(
+                0,
+                lines.size(),
+                lines.front().indent,
+                result.project,
+                result);
+        }
+
+        discovering_args = false;
+
+        return result;
+    }
+
     ParsedManifest parse() {
         ParsedManifest result;
 
@@ -1725,7 +1930,9 @@ fs::path canonical_manifest_path(
 }
 
 ParsedManifest parse_single_file(
-    const fs::path& path) {
+    const fs::path& path,
+    ParserState& state,
+    bool discover_args = false) {
 
     std::ifstream file(
         path,
@@ -1750,22 +1957,118 @@ ParsedManifest parse_single_file(
     const std::string contents =
         contents_stream.str();
 
-    ParsedManifest result =
-        Parser(
-            path,
-            contents)
-            .parse();
+    Parser parser(
+        path,
+        contents,
+        state);
 
-    result.canonical_path =
-        path.string();
+    if (discover_args) {
+        ParsedManifest result =
+            parser.discover_args();
 
-    result.raw_contents =
-        contents;
+        result.canonical_path =
+            path.string();
 
-    return result;
+        result.raw_contents =
+            contents;
+
+        return result;
+    }
+
+    return parser.parse();
+}
+
+void apply_args_file(
+    const fs::path& path,
+    ParserState& state) {
+
+    std::ifstream file(
+        path,
+        std::ios::binary);
+
+    if (!file) {
+        throw std::runtime_error(
+            "unable to open NightBuild args file: " +
+            path.string());
+    }
+
+    std::ostringstream contents_stream;
+    contents_stream << file.rdbuf();
+
+    if (!file.good() &&
+        !file.eof()) {
+        throw std::runtime_error(
+            "failed reading NightBuild args file: " +
+            path.string());
+    }
+
+    const std::string contents =
+        contents_stream.str();
+
+    Parser parser(
+        path,
+        contents,
+        state);
+
+    std::size_t i = 0;
+
+    while (i < parser.lines.size()) {
+        const SourceLine& line =
+            parser.lines[i];
+
+        const auto [name, operator_text] =
+            parser.assignment(
+                line.text,
+                line.number);
+
+        if (operator_text != "=") {
+            parser.error(
+                line.number,
+                "args.nb only supports =");
+        }
+
+        if (!is_identifier(name)) {
+            parser.error(
+                line.number,
+                "invalid argument name '" +
+                name +
+                "'");
+        }
+
+        if (!state.declared_args.contains(name)) {
+            parser.error(
+                line.number,
+                "unknown argument '" +
+                name +
+                "'");
+        }
+
+        const std::string initial_value =
+            parser.assignment_value(
+                line.text,
+                operator_text,
+                line.number);
+
+        const auto [complete_value, next] =
+            parser.collect_value(
+                i,
+                parser.lines.size(),
+                initial_value,
+                line.number);
+
+        state.variables[name] =
+            parser.parse_value(
+                complete_value,
+                line.number);
+
+        state.overridden_args.insert(name);
+
+        i = next;
+    }
 }
 
 struct IncludeLoader {
+    ParserState state;
     std::unordered_set<std::string> loaded_files;
     std::unordered_set<std::string> active_files;
     std::vector<std::string> include_stack;
@@ -1775,13 +2078,36 @@ struct IncludeLoader {
         manifest_contents;
 
     Project load_root(
-        const fs::path& root) {
+        const fs::path& root,
+        const fs::path& build_dir) {
 
         const fs::path canonical =
             canonical_manifest_path(root);
 
+        loaded_files.clear();
+        active_files.clear();
+        include_stack.clear();
+
+        discover_file(canonical);
+
+        const fs::path args_path =
+            fs::absolute(build_dir) / "args.nb";
+
+        if (fs::exists(args_path)) {
+            apply_args_file(
+                args_path,
+                state);
+        }
+
+        loaded_files.clear();
+        active_files.clear();
+        include_stack.clear();
+        manifest_contents.clear();
+
         ParsedManifest parsed =
-            parse_single_file(canonical);
+            parse_single_file(
+                canonical,
+                state);
 
         Project result =
             std::move(parsed.project);
@@ -1819,6 +2145,78 @@ struct IncludeLoader {
             canonical_string);
 
         return result;
+    }
+
+    void discover_file(
+        const fs::path& path) {
+
+        const fs::path canonical =
+            canonical_manifest_path(path);
+
+        const std::string canonical_string =
+            canonical.string();
+
+        if (active_files.contains(
+                canonical_string)) {
+
+            std::ostringstream error;
+
+            error << "NightBuild import cycle detected:\n";
+
+            auto it =
+                std::find(
+                    include_stack.begin(),
+                    include_stack.end(),
+                    canonical_string);
+
+            if (it != include_stack.end()) {
+                for (; it != include_stack.end(); ++it) {
+                    error << "  "
+                          << *it
+                          << "\n";
+                }
+            }
+
+            error << "  "
+                  << canonical_string;
+
+            throw std::runtime_error(
+                error.str());
+        }
+
+        if (loaded_files.contains(
+                canonical_string)) {
+            return;
+        }
+
+        active_files.insert(
+            canonical_string);
+
+        include_stack.push_back(
+            canonical_string);
+
+        ParsedManifest parsed =
+            parse_single_file(
+                canonical,
+                state,
+                true);
+
+        loaded_files.insert(
+            canonical_string);
+
+        for (const std::string& import :
+             parsed.imports) {
+
+            const fs::path child =
+                canonical.parent_path() /
+                import;
+
+            discover_file(child);
+        }
+
+        include_stack.pop_back();
+        active_files.erase(
+            canonical_string);
     }
 
 private:
@@ -1867,7 +2265,8 @@ private:
 
         ParsedManifest parsed =
             parse_single_file(
-                canonical);
+                canonical,
+                state);
 
         loaded_files.insert(
             canonical_string);
@@ -2195,7 +2594,8 @@ void validate_project(
 }  // namespace
 
 Project parse_file(
-    const std::string& path) {
+    const std::string& path,
+    const fs::path& build_dir) {
 
     const fs::path manifest(path);
 
@@ -2210,11 +2610,12 @@ Project parse_file(
             "NightBuild manifest is not a regular file: " +
             manifest.string());
     }
-
     IncludeLoader loader;
-
     Project project =
-        loader.load_root(manifest);
+        loader.load_root(
+            manifest,
+            build_dir);
+
 
     validate_project(project);
 

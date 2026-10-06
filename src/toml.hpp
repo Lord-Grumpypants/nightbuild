@@ -1,4 +1,5 @@
 
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -115,6 +116,7 @@ struct Project {
 };
 
 Project parse_file(
-    const std::string &path);
+    const std::string &path,
+    const std::filesystem::path &build_dir);
 
 } // namespace toml
