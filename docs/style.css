@@ -150,6 +150,30 @@ main {
     letter-spacing: -0.02em;
 }
 
+.architecture-line {
+    display: inline-block;
+    max-width: 700px;
+    margin: 40px auto 0;
+    padding: 10px 24px;
+    
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(12px);
+
+    color: var(--muted);
+    font-size: clamp(14px, 1.8vw, 17px);
+    letter-spacing: -0.01em;
+    text-align: center;
+
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.architecture-line strong {
+    color: var(--accent-bright);
+    font-weight: 600;
+}
+
 .hero-actions {
     display: flex;
     align-items: center;
