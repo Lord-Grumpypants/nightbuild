@@ -48,6 +48,12 @@
         </div>
     </section>
 
+    <p class="architecture-line">
+        GN-style generation. Ninja-style execution.
+        <strong>No Ninja in the middle.</strong>
+    </p>
+
+
     <section class="demo-section" id="demo">
         <div class="section-heading">
             <p class="eyebrow">REAL BUILD. REAL OUTPUT.</p>
@@ -138,13 +144,14 @@
 
         <article>
             <span class="feature-number">05</span>
-            <h3>Direct</h3>
+            <h3>Generated once</h3>
             <p>
-                Build definitions describe targets and their inputs.
-                NightBuild turns them into commands without requiring
-                a sprawling build-language ecosystem.
+                Define your project with BUILD.nb, configure it with args.nb,
+                and generate a concrete command database. Build execution
+                works directly from that graph.
             </p>
         </article>
+
 
         <article>
             <span class="feature-number">06</span>

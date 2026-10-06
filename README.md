@@ -86,6 +86,11 @@ Generate a build directory:
 nightbuild gen -C out/Official
 ```
 
+Configure a build directory:
+```text
+nightbuild args -C out/Official
+```
+
 Build everything:
 
 ```text
@@ -137,6 +142,38 @@ NightBuild deliberately separates **generation** from **execution**.
 `nightbuild gen` reads the project's `BUILD.nb`, resolves targets and dependencies, loads toolchains, and produces a concrete command database.
 
 The expensive decisions are made up front.
+
+### Configuration
+
+NightBuild supports GN-style build arguments through `args.nb`.
+
+Arguments are declared in `BUILD.nb`:
+
+declare_args("lto"):
+    default = true
+
+if lto:
+    ldflags += ["-flto=full"]
+
+Configuration overrides live in the output directory:
+
+out/Official/args.nb
+
+For example:
+
+lto = false
+
+Regenerate the configuration with:
+
+nightbuild args -C out/Official
+
+Then build normally:
+
+nightbuild build -C out/Official
+
+`args.nb` only overrides arguments explicitly declared by the project. Unknown arguments are rejected.
+
+This keeps project configuration separate from the project manifest while allowing the same `BUILD.nb` to produce different build configurations.
 
 ### Execution
 
