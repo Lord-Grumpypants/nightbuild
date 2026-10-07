@@ -197,6 +197,25 @@ def main():
         env=env,
     )
 
+    run(
+        str(nightbuild),
+        "gen",
+        "-C",
+        str(BUILD_DIR),
+        cwd=ROOT,
+        env=env,
+    )
+
+    run(
+        str(nightbuild),
+        "build",
+        "-C",
+        str(BUILD_DIR),
+        "nightbuild",
+        cwd=ROOT,
+        env=env,
+    )
+
 
 if __name__ == "__main__":
     main()
