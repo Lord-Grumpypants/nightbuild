@@ -116,3 +116,19 @@ executable("test"):
     sources = [
         "tests/main.cpp",
     ]
+
+action("generate-pgo"):
+    dependencies = [
+        "nightbuild-pgo",
+    ]
+
+    action = [
+        "python3",
+        "scripts/generate_pgo.py",
+    ]
+
+    inputs = [
+        "scripts/generate_pgo.py",
+    ]
+
+    output = "nightbuild.profdata"
