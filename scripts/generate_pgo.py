@@ -70,14 +70,15 @@ def main():
         # configure.py's generated build.ninja normally creates browse_py.h
         # through this rule. Generate that prerequisite directly so the
         # actual Ninja compilation remains a NightBuild workload.
-        browse_header = ninja_src / "build" / "browse_py.h"
-
         run(
             "sh",
             "-c",
-            'src/inline.sh kBrowsePy < src/browse.py > build/browse_py.h',
+            "mkdir -p build && "
+            "src/inline.sh kBrowsePy < src/browse.py > build/browse_py.h",
             cwd=ninja_src,
         )
+
+        browse_header = ninja_src / "build" / "browse_py.h"
 
         if not browse_header.exists():
             raise SystemExit(
