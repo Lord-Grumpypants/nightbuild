@@ -71,10 +71,9 @@ def main():
 
         build_file = ninja_src / "BUILD.nb"
 
-        source_lines = ",\n".join(
-            f'        "{source}",'
-            for source in sources
-        )
+        source_lines = "\n".join(
+                        f'"{source}",' 
+                        for source in sources)
 
         build_file.write_text(
             f'''project("Ninja")
