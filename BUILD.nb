@@ -47,7 +47,6 @@ executable("nightbuild"):
     ldflags = [
         "-flto=full",
         "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
-        "-fprofile-instr-use=nightbuild.profdata",
         "-Wl,--icf=safe",
     ]
 
