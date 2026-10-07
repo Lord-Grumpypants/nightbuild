@@ -1,0 +1,4 @@
+static_library("core"):
+    sources = [
+        "core.cpp",
+    ]

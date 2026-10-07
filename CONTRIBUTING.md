@@ -6,7 +6,6 @@ We also suggest that you get familiar with the project, especially `BUILD.nb` an
 
 Here are some good first projects:
 
-* Migrating tests from `nightbuild.toml` to `BUILD.nb`
 * Improving documentation
 * Making a script to generate PGO profiles
 

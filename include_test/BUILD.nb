@@ -1,0 +1,12 @@
+project("include_test")
+
+import "core.nb"
+
+executable("hello"):
+    sources = [
+        "main.cpp",
+    ]
+
+    dependencies = [
+        "core",
+    ]

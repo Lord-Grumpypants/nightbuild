@@ -1,0 +1,15 @@
+project("DepsStaticTest")
+
+static_library("hello"):
+    sources = [
+        "hello.cpp",
+    ]
+
+executable("test"):
+    sources = [
+        "main.cpp",
+    ]
+
+    dependencies = [
+        "hello",
+    ]
