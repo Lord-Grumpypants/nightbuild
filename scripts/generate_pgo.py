@@ -1,7 +1,7 @@
-# scripts/generate_pgo.py
 #!/usr/bin/env python3
 
 from pathlib import Path
+
 import os
 import shutil
 import subprocess
@@ -39,7 +39,13 @@ def main():
         else:
             raise SystemExit("error: llvm-profdata not found")
 
-    workdir = Path(tempfile.mkdtemp(prefix="nightbuild-pgo-ninja-", dir="/tmp"))
+    workdir = Path(
+        tempfile.mkdtemp(
+            prefix="nightbuild-pgo-ninja-",
+            dir="/tmp",
+        )
+    )
+
     ninja_src = workdir / "ninja"
 
     try:
@@ -61,22 +67,32 @@ def main():
             cwd=ninja_src,
         )
 
-        sources = sorted(
-            path.relative_to(ninja_src)
-            for path in (ninja_src / "src").glob("*.cc")
+        # configure.py's generated build.ninja normally creates browse_py.h
+        # through this rule. Generate that prerequisite directly so the
+        # actual Ninja compilation remains a NightBuild workload.
+        browse_header = ninja_src / "build" / "browse_py.h"
+
+        run(
+            "sh",
+            "-c",
+            'src/inline.sh kBrowsePy < src/browse.py > build/browse_py.h',
+            cwd=ninja_src,
         )
 
-        if not sources:
-            raise SystemExit("error: no Ninja C++ sources found")
+        if not browse_header.exists():
+            raise SystemExit(
+                f"error: failed to generate {browse_header}"
+            )
 
+        print(f"PGO · generated {browse_header}")
+
+        # Use the fixed, known-good Ninja manifest. Do not discover sources
+        # dynamically: Ninja contains many auxiliary and platform-specific
+        # sources that are not part of the ninja executable.
         build_file = ninja_src / "BUILD.nb"
 
-        source_lines = "\n".join(
-                        f'"{source}",' 
-                        for source in sources)
-
-        build_file.write_text("""
-            
+        build_file.write_text(
+            """
 project("Ninja")
 
 executable("ninja"):
@@ -136,7 +152,7 @@ executable("ninja"):
         "-fvisibility=hidden",
         "-pipe",
         "-DNINJA_HAVE_BROWSE",
-        "-DNINJA_PYTHON=\"python3\"",
+        "-DNINJA_PYTHON=\\"python3\\"",
     ]
 
     ldflags = [
@@ -144,16 +160,15 @@ executable("ninja"):
     ]
 
     frameworks = []
-
 """,
             encoding="utf-8",
         )
 
         print(f"PGO · generated {build_file}")
-        print(build_file.read_text(encoding="utf-8"))
 
-        # Keep every raw profile separate. LLVM's %p expands to the process ID,
-        # which is important because NightBuild launches multiple compilers.
+        # Keep every raw profile separate. LLVM's %p expands to the process
+        # ID, which is important because NightBuild launches multiple
+        # compilers.
         profile_pattern = workdir / "nightbuild-%p.profraw"
 
         env = os.environ.copy()
@@ -179,10 +194,14 @@ executable("ninja"):
             env=env,
         )
 
-        raw_profiles = sorted(workdir.glob("nightbuild-*.profraw"))
+        raw_profiles = sorted(
+            workdir.glob("nightbuild-*.profraw")
+        )
 
         if not raw_profiles:
-            raise SystemExit("error: NightBuild produced no .profraw files")
+            raise SystemExit(
+                "error: NightBuild produced no .profraw files"
+            )
 
         # Merge all compiler/process profiles into the profile consumed by
         # the normal NightBuild target.
@@ -204,5 +223,3 @@ executable("ninja"):
 
 if __name__ == "__main__":
     main()
-
-
