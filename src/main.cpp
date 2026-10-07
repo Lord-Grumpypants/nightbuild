@@ -6288,7 +6288,8 @@ void print_help()
         << "  nightbuild <command> [options] [targets...]\n\n"
 
         << "Commands:\n"
-        << "  gen <dir>                 Generate build files\n"
+        << "  gen -C <dir>              Generate build files\n"
+        << "  args -C <dir>             Apply build arguments and regenerate\n"
         << "  build -C <dir> [targets] Build selected targets\n"
         << "  rebuild -C <dir> [targets]\n"
         << "                            Clean and build selected targets\n"
@@ -6299,10 +6300,15 @@ void print_help()
         << "  -C <dir>                  Use <dir> as the build directory\n"
         << "  -v, --verbose             Print commands as they execute\n"
         << "  --help                    Show this help message\n"
-        << "  --version                 Show NightBuild version\n\n"
+        << "  --version                 Show version information\n\n"
+
+        << "Build arguments:\n"
+        << "  args.nb                   Override declared build arguments\n"
+        << "  declare_args(...)          Declare configurable build arguments\n"
+        << "  Arguments are applied before build graph generation.\n\n"
 
         << "Targets:\n"
-        << "  If no targets are specified, all targets are built.\n"
+        << "  If no targets are specified, all default targets are built.\n"
         << "  Multiple targets may be specified.\n"
         << "  Target dependencies are built automatically.\n\n"
 
@@ -6313,29 +6319,34 @@ void print_help()
         << "  shared_lib                Shared library\n"
         << "  object                    Object target\n"
         << "  framework                 macOS framework\n"
-        << "  ACTION                    Custom action\n\n"
+        << "  generator                 Build-time generator\n"
+        << "  action                    Custom build action\n\n"
 
         << "Build model:\n"
-        << "  NightBuild tracks file and dependency hashes rather than\n"
-        << "  modification times. Unchanged work is skipped automatically.\n\n"
+        << "  NightBuild generates a concrete command database.\n"
+        << "  File and dependency hashes are used for incremental builds.\n"
+        << "  Unchanged work is skipped automatically.\n\n"
 
         << "Toolchains:\n"
         << "  Toolchains are loaded during 'gen' using\n"
         << "  target.toolchain_include entries.\n\n"
 
         << "Examples:\n"
-        << "  nightbuild gen build\n"
-        << "  nightbuild build -C build\n"
-        << "  nightbuild build -C build nightbuild\n"
-        << "  nightbuild build -C build nightbuild test\n"
-        << "  nightbuild build -C build -v\n"
-        << "  nightbuild rebuild -C build\n";
+        << "  nightbuild gen -C out/Official\n"
+        << "  nightbuild args -C out/Official\n"
+        << "  nightbuild build -C out/Official\n"
+        << "  nightbuild build -C out/Official nightbuild\n"
+        << "  nightbuild build -C out/Official nightbuild test\n"
+        << "  nightbuild build -C out/Official -v\n"
+        << "  nightbuild rebuild -C out/Official\n"
+        << "  nightbuild clean -C out/Official\n"
+        << "  nightbuild clobber -C out/Official\n";
 }
 
 void print_version()
 {
     std::cout
-        << "NightBuild 0.1\n"
+        << "NightBuild 0.2\n"
         << "Native C++ build system\n";
 }
 

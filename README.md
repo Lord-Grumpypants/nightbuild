@@ -10,6 +10,16 @@ The goal is simple:
 
 No CMake language to learn. No enormous build-system configuration. No generated `build.ninja` sitting between your project and the executor.
 
+## Quick Start
+
+Clone NightBuild and run the bootstrap:
+
+```bash
+git clone https://github.com/Lord-Grumpypants/nightbuild.git
+cd nightbuild
+python3 bootstrap.py
+```
+
 ## Why NightBuild?
 
 C++ projects shouldn't need a complicated build system just to compile a few source files.
@@ -27,7 +37,7 @@ executable("hello"):
 
 Then:
 
-```text
+```bash
 nightbuild gen -C out/Official
 nightbuild build -C out/Official
 ```
@@ -40,17 +50,80 @@ NightBuild turns the manifest into a concrete build graph during `gen`, then exe
 
 * Native **C++23** implementation
 * Simple indentation-based `BUILD.nb` manifests
+* GN-style build arguments through `declare_args` and `args.nb`
 * Fast parallel execution
 * Dependency-aware scheduling
 * Hash-based incremental builds
 * Built-in C, C++, Objective-C, Objective-C++, and Swift toolchains
 * Static libraries, shared libraries, executables, applications, frameworks, and object targets
-* Generator/action targets
+* Generator and action targets
 * Toolchain configuration through JSON
 * `pkg-config` integration
 * Compile command generation
 * PGO/LTO-friendly
 * No runtime dependency on Python, CMake, GN, or Ninja for native NightBuild builds
+
+## Build Arguments
+
+NightBuild supports configurable build arguments through `declare_args` and `args.nb`.
+
+Arguments are declared in `BUILD.nb`:
+
+```text
+declare_args("lto"):
+    default = true
+
+if lto:
+    ldflags += ["-flto=full"]
+```
+
+A project can declare as many arguments as it needs. Arguments have defaults, so a project remains usable even when no `args.nb` file exists.
+
+Configuration overrides live in the output directory:
+
+```text
+out/Official/args.nb
+```
+
+For example:
+
+```text
+lto = false
+```
+
+Apply the configuration with:
+
+```text
+nightbuild args -C out/Official
+```
+
+Then build normally:
+
+```text
+nightbuild build -C out/Official
+```
+
+`args.nb` only overrides arguments explicitly declared by the project. Unknown arguments are rejected.
+
+This keeps project configuration separate from the project manifest while allowing the same `BUILD.nb` to produce different build configurations.
+
+The intended flow is:
+
+```text
+BUILD.nb
+   ↓
+declare_args + defaults
+   ↓
+args.nb overrides
+   ↓
+evaluate BUILD.nb
+   ↓
+concrete build graph
+   ↓
+build
+```
+
+Arguments configure the project; they do not modify targets after generation.
 
 ## A Slightly Larger Example
 
@@ -86,7 +159,8 @@ Generate a build directory:
 nightbuild gen -C out/Official
 ```
 
-Configure a build directory:
+Configure a build directory using `args.nb`:
+
 ```text
 nightbuild args -C out/Official
 ```
@@ -139,41 +213,15 @@ NightBuild deliberately separates **generation** from **execution**.
 
 ### Generation
 
-`nightbuild gen` reads the project's `BUILD.nb`, resolves targets and dependencies, loads toolchains, and produces a concrete command database.
+`nightbuild gen` reads the project's `BUILD.nb`, resolves targets and dependencies, loads toolchains, evaluates configuration, and produces a concrete command database.
 
 The expensive decisions are made up front.
 
 ### Configuration
 
-NightBuild supports GN-style build arguments through `args.nb`.
+`nightbuild args` applies the project's `args.nb` configuration and regenerates the build graph.
 
-Arguments are declared in `BUILD.nb`:
-
-declare_args("lto"):
-    default = true
-
-if lto:
-    ldflags += ["-flto=full"]
-
-Configuration overrides live in the output directory:
-
-out/Official/args.nb
-
-For example:
-
-lto = false
-
-Regenerate the configuration with:
-
-nightbuild args -C out/Official
-
-Then build normally:
-
-nightbuild build -C out/Official
-
-`args.nb` only overrides arguments explicitly declared by the project. Unknown arguments are rejected.
-
-This keeps project configuration separate from the project manifest while allowing the same `BUILD.nb` to produce different build configurations.
+This means configuration is explicit rather than being rediscovered during every build.
 
 ### Execution
 
@@ -182,8 +230,6 @@ This keeps project configuration separate from the project manifest while allowi
 There is no need to repeatedly parse a high-level build language or rediscover build rules while compiling.
 
 This gives NightBuild a design that is conceptually similar to GN's generation model while retaining the direct execution model that makes Ninja fast.
-
-**GN-style generation. Ninja-style execution. No Ninja in the middle.**
 
 ## Scheduling
 
@@ -233,7 +279,7 @@ NightBuild was the fastest in the 15-round tournament.
 
 That's a benchmark of one project on one machine, not a claim that NightBuild will beat every build system on every workload. The purpose is to measure real progress and keep performance regressions visible.
 
-This is from [`tournament.sh`](tournament.sh)
+This is a benchmark script in [`tournament.sh`](tournament.sh).
 
 ## Bootstrap
 
@@ -255,17 +301,29 @@ optimized NightBuild
 
 Make is used only to get the first NightBuild executable onto the machine. The canonical project description is `BUILD.nb`.
 
+The full bootstrap process can additionally build an instrumented NightBuild, train its profile by compiling Ninja, merge the resulting LLVM profile data, and produce the optimized NightBuild executable.
+
 ## Building NightBuild
 
-Clone the repository and bootstrap it:
+The simplest development workflow is:
 
 ```text
 git clone https://github.com/Lord-Grumpypants/nightbuild.git
 cd nightbuild
 make
+./nightbuild gen -C out/Official
+./nightbuild build -C out/Official
 ```
 
 After bootstrapping, NightBuild can build itself using its own build system.
+
+For the full optimized bootstrap:
+
+```text
+python3 bootstrap.py
+```
+
+The bootstrap script installs any required Homebrew dependencies, builds the bootstrap NightBuild, trains PGO using Ninja, and produces the final optimized binary.
 
 ## Project Philosophy
 
