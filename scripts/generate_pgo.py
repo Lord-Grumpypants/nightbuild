@@ -92,6 +92,9 @@ executable("ninja"):
             encoding="utf-8",
         )
 
+        print(f"PGO · generated {build_file}")
+        print(build_file.read_text(encoding="utf-8"))
+
         # Keep every raw profile separate. LLVM's %p expands to the process ID,
         # which is important because NightBuild launches multiple compilers.
         profile_pattern = workdir / "nightbuild-%p.profraw"
@@ -139,7 +142,7 @@ executable("ninja"):
         print(f"PGO · wrote {PROFDATA}")
 
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        print(f"PGO · training directory: {workdir}")
 
 
 if __name__ == "__main__":
