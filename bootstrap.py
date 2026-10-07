@@ -9,7 +9,9 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parent
-BUILD_DIR = ROOT / "out" / "Official"
+
+OFFICIAL_BUILD_DIR = ROOT / "out" / "Official"
+PGO_BUILD_DIR = ROOT / "out" / "PGO"
 
 BREW_PREFIX = Path("/opt/homebrew")
 BREW = BREW_PREFIX / "bin" / "brew"
@@ -61,6 +63,7 @@ def package_installed(brew, package):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
     return result.returncode == 0
 
 
@@ -165,7 +168,7 @@ def main():
         str(nightbuild),
         "gen",
         "-C",
-        str(BUILD_DIR),
+        str(PGO_BUILD_DIR),
         cwd=ROOT,
         env=env,
     )
@@ -174,7 +177,7 @@ def main():
         str(nightbuild),
         "build",
         "-C",
-        str(BUILD_DIR),
+        str(PGO_BUILD_DIR),
         "nightbuild-pgo",
         cwd=ROOT,
         env=env,
@@ -201,7 +204,7 @@ def main():
         str(nightbuild),
         "gen",
         "-C",
-        str(BUILD_DIR),
+        str(OFFICIAL_BUILD_DIR),
         cwd=ROOT,
         env=env,
     )
@@ -210,7 +213,7 @@ def main():
         str(nightbuild),
         "build",
         "-C",
-        str(BUILD_DIR),
+        str(OFFICIAL_BUILD_DIR),
         "nightbuild",
         cwd=ROOT,
         env=env,
