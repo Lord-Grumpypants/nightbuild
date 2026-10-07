@@ -75,19 +75,77 @@ def main():
                         f'"{source}",' 
                         for source in sources)
 
-        build_file.write_text(
-            f'''project("Ninja")
+        build_file.write_text("""
+            
+project("Ninja")
 
 executable("ninja"):
     sources = [
-{source_lines}
+        "src/browse.cc",
+        "src/depfile_parser.cc",
+        "src/lexer.cc",
+        "src/build.cc",
+        "src/build_log.cc",
+        "src/clean.cc",
+        "src/clparser.cc",
+        "src/debug_flags.cc",
+        "src/deps_log.cc",
+        "src/disk_interface.cc",
+        "src/dyndep.cc",
+        "src/dyndep_parser.cc",
+        "src/edit_distance.cc",
+        "src/elide_middle.cc",
+        "src/eval_env.cc",
+        "src/explanations.cc",
+        "src/graph.cc",
+        "src/graphviz.cc",
+        "src/jobserver.cc",
+        "src/jobserver_pool.cc",
+        "src/json.cc",
+        "src/line_printer.cc",
+        "src/manifest_parser.cc",
+        "src/metrics.cc",
+        "src/missing_deps.cc",
+        "src/parser.cc",
+        "src/real_command_runner.cc",
+        "src/state.cc",
+        "src/status_printer.cc",
+        "src/string_piece_util.cc",
+        "src/util.cc",
+        "src/version.cc",
+        "src/jobserver-posix.cc",
+        "src/subprocess-posix.cc",
+        "src/ninja.cc",
     ]
 
-    cxxflags = [
-        "-std=c++17",
-        "-O3",
+    include_dirs = [
+        ".",
     ]
-''',
+
+    cflags = [
+        "-std=c++17",
+        "-O2",
+        "-DNDEBUG",
+        "-Wall",
+        "-Wextra",
+        "-Wno-deprecated",
+        "-Wno-missing-field-initializers",
+        "-Wno-unused-parameter",
+        "-fno-rtti",
+        "-fno-exceptions",
+        "-fvisibility=hidden",
+        "-pipe",
+        "-DNINJA_HAVE_BROWSE",
+        "-DNINJA_PYTHON=\"python3\"",
+    ]
+
+    ldflags = [
+        "-L/opt/homebrew/opt/llvm/lib",
+    ]
+
+    frameworks = []
+
+""",
             encoding="utf-8",
         )
 
