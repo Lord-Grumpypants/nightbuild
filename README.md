@@ -279,7 +279,7 @@ NightBuild was the fastest in the 15-round tournament.
 
 That's a benchmark of one project on one machine, not a claim that NightBuild will beat every build system on every workload. The purpose is to measure real progress and keep performance regressions visible.
 
-This is a benchmark script in [`tournament.sh`](tournament.sh).
+Those were the results from our benchmark script, [`tournament.sh`](tournament.sh).
 
 ## Bootstrap
 
