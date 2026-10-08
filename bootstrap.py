@@ -195,7 +195,7 @@ def main():
     run(
         python,
         str(ROOT / "scripts" / "generate_pgo.py"),
-        str(PGO_BUILD_DIR / "nightbuild-pgo"),
+        str(ROOT / "nightbuild-pgo"),
         cwd=ROOT,
         env=env,
     )

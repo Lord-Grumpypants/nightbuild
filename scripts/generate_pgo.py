@@ -33,6 +33,7 @@ def main():
         )
 
     git = shutil.which("git")
+
     llvm_profdata = shutil.which("llvm-profdata")
 
     if git is None:
@@ -40,6 +41,7 @@ def main():
 
     if llvm_profdata is None:
         candidate = Path("/opt/homebrew/opt/llvm/bin/llvm-profdata")
+
         if candidate.exists():
             llvm_profdata = str(candidate)
         else:
@@ -71,6 +73,7 @@ def main():
         )
 
         browse_header = ninja_src / "build" / "browse_py.h"
+
         run(
             "sh",
             "-c",
@@ -87,6 +90,7 @@ def main():
         print(f"PGO · generated {browse_header}")
 
         build_file = ninja_src / "BUILD.nb"
+
         build_file.write_text(
             """
 project("Ninja")
@@ -156,7 +160,7 @@ executable("ninja"):
     ]
 
     frameworks = [
-]
+    ]
 """,
             encoding="utf-8",
         )
@@ -164,6 +168,7 @@ executable("ninja"):
         print(f"PGO · generated {build_file}")
 
         profile_pattern = workdir / "nightbuild-%p.profraw"
+
         env = os.environ.copy()
         env["LLVM_PROFILE_FILE"] = str(profile_pattern)
 
@@ -203,6 +208,7 @@ executable("ninja"):
         ]
 
         run(*merge_args)
+
         print(f"PGO · wrote {PROFDATA}")
 
     finally:
