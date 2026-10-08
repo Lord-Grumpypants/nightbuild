@@ -6281,66 +6281,107 @@ void rebuild(
 
 void print_help()
 {
+    constexpr const char* reset  = "\033[0m";
+    constexpr const char* bold   = "\033[1m";
+    constexpr const char* dim    = "\033[2m";
+    constexpr const char* cyan   = "\033[36m";
+    constexpr const char* yellow = "\033[33m";
+    constexpr const char* green  = "\033[32m";
+    constexpr const char* white  = "\033[97m";
+
     std::cout
-        << "NightBuild - native C++ build system\n\n"
+        << "\n"
+        << bold << white << "NightBuild" << reset
+        << dim << " · native C++ build system" << reset
+        << "\n\n"
 
-        << "Usage:\n"
-        << "  nightbuild <command> [options] [targets...]\n\n"
+        << bold << yellow << "Usage" << reset << "\n"
+        << "  " << cyan << "nightbuild <command> [options] [targets...]" << reset
+        << "\n\n"
 
-        << "Commands:\n"
-        << "  gen -C <dir>              Generate build files\n"
-        << "  args -C <dir>             Apply build arguments and regenerate\n"
-        << "  build -C <dir> [targets] Build selected targets\n"
-        << "  rebuild -C <dir> [targets]\n"
-        << "                            Clean and build selected targets\n"
-        << "  clean -C <dir>            Remove build outputs\n"
-        << "  clobber -C <dir>          Remove the entire build directory\n\n"
+        << bold << yellow << "Commands" << reset << "\n"
+        << "  " << cyan << "gen -C <dir>" << reset
+        << "                 Generate build files\n"
+        << "  " << cyan << "args -C <dir>" << reset
+        << "                Apply build arguments and regenerate\n"
+        << "  " << cyan << "build -C <dir> [targets]" << reset
+        << "   Build selected targets\n"
+        << "  " << cyan << "rebuild -C <dir> [targets]" << reset
+        << " Clean and build selected targets\n"
+        << "  " << cyan << "clean -C <dir>" << reset
+        << "            Remove build outputs\n"
+        << "  " << cyan << "clobber -C <dir>" << reset
+        << "          Remove the entire build directory\n"
+        << "\n"
 
-        << "Options:\n"
-        << "  -C <dir>                  Use <dir> as the build directory\n"
-        << "  -v, --verbose             Print commands as they execute\n"
-        << "  --help                    Show this help message\n"
-        << "  --version                 Show version information\n\n"
+        << bold << yellow << "Options" << reset << "\n"
+        << "  " << cyan << "-C <dir>" << reset
+        << "                  Use <dir> as the build directory\n"
+        << "  " << cyan << "-v, --verbose" << reset
+        << "             Print commands as they execute\n"
+        << "  " << cyan << "--help" << reset
+        << "                    Show this help message\n"
+        << "  " << cyan << "--version" << reset
+        << "                 Show version information\n"
+        << "\n"
 
-        << "Build arguments:\n"
-        << "  args.nb                   Override declared build arguments\n"
-        << "  declare_args(...)          Declare configurable build arguments\n"
-        << "  Arguments are applied before build graph generation.\n\n"
+        << bold << yellow << "Build arguments" << reset << "\n"
+        << "  " << cyan << "args.nb" << reset
+        << "                   Override declared build arguments\n"
+        << "  " << cyan << "declare_args(...)" << reset
+        << "          Declare configurable arguments\n"
+        << "  " << dim << "Arguments are applied before build graph generation." << reset
+        << "\n\n"
 
-        << "Targets:\n"
+        << bold << yellow << "Targets" << reset << "\n"
         << "  If no targets are specified, all default targets are built.\n"
         << "  Multiple targets may be specified.\n"
-        << "  Target dependencies are built automatically.\n\n"
+        << "  Target dependencies are built automatically.\n"
+        << "\n"
 
-        << "Target types:\n"
-        << "  executable                Native executable\n"
-        << "  app                       macOS application bundle\n"
-        << "  static_lib                Static library\n"
-        << "  shared_lib                Shared library\n"
-        << "  object                    Object target\n"
-        << "  framework                 macOS framework\n"
-        << "  generator                 Build-time generator\n"
-        << "  action                    Custom build action\n\n"
+        << bold << yellow << "Target types" << reset << "\n"
+        << "  " << green << "executable" << reset
+        << "                Native executable\n"
+        << "  " << green << "app" << reset
+        << "                       macOS application bundle\n"
+        << "  " << green << "static_lib" << reset
+        << "                Static library\n"
+        << "  " << green << "shared_lib" << reset
+        << "                Shared library\n"
+        << "  " << green << "object" << reset
+        << "                    Object target\n"
+        << "  " << green << "framework" << reset
+        << "                macOS framework\n"
+        << "  " << green << "generator" << reset
+        << "                Build-time generator\n"
+        << "  " << green << "action" << reset
+        << "                   Custom build action\n"
+        << "\n"
 
-        << "Build model:\n"
+        << bold << yellow << "Build model" << reset << "\n"
         << "  NightBuild generates a concrete command database.\n"
         << "  File and dependency hashes are used for incremental builds.\n"
-        << "  Unchanged work is skipped automatically.\n\n"
+        << "  Unchanged work is skipped automatically.\n"
+        << "\n"
 
-        << "Toolchains:\n"
-        << "  Toolchains are loaded during 'gen' using\n"
-        << "  target.toolchain_include entries.\n\n"
+        << bold << yellow << "Toolchains" << reset << "\n"
+        << "  Toolchains are loaded during " << cyan << "gen" << reset
+        << " using\n"
+        << "  " << cyan << "target.toolchain_include" << reset
+        << " entries.\n"
+        << "\n"
 
-        << "Examples:\n"
-        << "  nightbuild gen -C out/Official\n"
-        << "  nightbuild args -C out/Official\n"
-        << "  nightbuild build -C out/Official\n"
-        << "  nightbuild build -C out/Official nightbuild\n"
-        << "  nightbuild build -C out/Official nightbuild test\n"
-        << "  nightbuild build -C out/Official -v\n"
-        << "  nightbuild rebuild -C out/Official\n"
-        << "  nightbuild clean -C out/Official\n"
-        << "  nightbuild clobber -C out/Official\n";
+        << bold << yellow << "Examples" << reset << "\n"
+        << "  " << cyan << "nightbuild gen -C out/Official" << reset << "\n"
+        << "  " << cyan << "nightbuild args -C out/Official" << reset << "\n"
+        << "  " << cyan << "nightbuild build -C out/Official" << reset << "\n"
+        << "  " << cyan << "nightbuild build -C out/Official nightbuild" << reset << "\n"
+        << "  " << cyan << "nightbuild build -C out/Official nightbuild test" << reset << "\n"
+        << "  " << cyan << "nightbuild build -C out/Official -v" << reset << "\n"
+        << "  " << cyan << "nightbuild rebuild -C out/Official" << reset << "\n"
+        << "  " << cyan << "nightbuild clean -C out/Official" << reset << "\n"
+        << "  " << cyan << "nightbuild clobber -C out/Official" << reset
+        << "\n\n";
 }
 
 void print_version()
