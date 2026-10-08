@@ -10,7 +10,6 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parent.parent
-NIGHTBUILD = ROOT / "nightbuild-pgo"
 PROFDATA = ROOT / "nightbuild.profdata"
 NINJA_URL = "https://github.com/ninja-build/ninja.git"
 
@@ -21,9 +20,16 @@ def run(*args, cwd=None, env=None):
 
 
 def main():
-    if not NIGHTBUILD.exists():
+    if len(sys.argv) != 2:
         raise SystemExit(
-            f"error: {NIGHTBUILD} not found; build nightbuild-pgo first"
+            "usage: generate_pgo.py <nightbuild-pgo>"
+        )
+
+    nightbuild = Path(sys.argv[1]).resolve()
+
+    if not nightbuild.exists():
+        raise SystemExit(
+            f"error: {nightbuild} not found; build nightbuild-pgo first"
         )
 
     git = shutil.which("git")
@@ -49,7 +55,6 @@ def main():
     ninja_src = workdir / "ninja"
 
     try:
-        # Fresh Ninja checkout. The entire training tree is disposable.
         run(
             git,
             "clone",
@@ -59,17 +64,13 @@ def main():
             str(ninja_src),
         )
 
-        # Ninja's configure step generates config.h and the normal Ninja
-        # build description. NightBuild itself performs the actual compile.
         run(
             sys.executable,
             "configure.py",
             cwd=ninja_src,
         )
 
-        # configure.py's generated build.ninja normally creates browse_py.h
-        # through this rule. Generate that prerequisite directly so the
-        # actual Ninja compilation remains a NightBuild workload.
+        browse_header = ninja_src / "build" / "browse_py.h"
         run(
             "sh",
             "-c",
@@ -78,8 +79,6 @@ def main():
             cwd=ninja_src,
         )
 
-        browse_header = ninja_src / "build" / "browse_py.h"
-
         if not browse_header.exists():
             raise SystemExit(
                 f"error: failed to generate {browse_header}"
@@ -87,11 +86,7 @@ def main():
 
         print(f"PGO · generated {browse_header}")
 
-        # Use the fixed, known-good Ninja manifest. Do not discover sources
-        # dynamically: Ninja contains many auxiliary and platform-specific
-        # sources that are not part of the ninja executable.
         build_file = ninja_src / "BUILD.nb"
-
         build_file.write_text(
             """
 project("Ninja")
@@ -160,24 +155,20 @@ executable("ninja"):
         "-L/opt/homebrew/opt/llvm/lib",
     ]
 
-    frameworks = []
+    frameworks = [
+]
 """,
             encoding="utf-8",
         )
 
         print(f"PGO · generated {build_file}")
 
-        # Keep every raw profile separate. LLVM's %p expands to the process
-        # ID, which is important because NightBuild launches multiple
-        # compilers.
         profile_pattern = workdir / "nightbuild-%p.profraw"
-
         env = os.environ.copy()
         env["LLVM_PROFILE_FILE"] = str(profile_pattern)
 
-        # Generate the concrete NightBuild command database.
         run(
-            str(NIGHTBUILD),
+            str(nightbuild),
             "gen",
             "-C",
             "build",
@@ -185,9 +176,8 @@ executable("ninja"):
             env=env,
         )
 
-        # This is the actual PGO workload: NightBuild compiles Ninja.
         run(
-            str(NIGHTBUILD),
+            str(nightbuild),
             "build",
             "-C",
             "build",
@@ -204,8 +194,6 @@ executable("ninja"):
                 "error: NightBuild produced no .profraw files"
             )
 
-        # Merge all compiler/process profiles into the profile consumed by
-        # the normal NightBuild target.
         merge_args = [
             llvm_profdata,
             "merge",
@@ -215,7 +203,6 @@ executable("ninja"):
         ]
 
         run(*merge_args)
-
         print(f"PGO · wrote {PROFDATA}")
 
     finally:
