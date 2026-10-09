@@ -191,6 +191,8 @@ public:
 
     bool empty() const;
 
+    std::vector<std::size_t> ready() const;
+
     bool done() const;
 
     std::size_t next();

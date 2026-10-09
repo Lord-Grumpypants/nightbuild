@@ -477,6 +477,18 @@ bool Scheduler::empty() const
     return queue.empty();
 }
 
+std::vector<std::size_t> Scheduler::ready() const
+{
+    std::vector<std::size_t> result;
+    result.reserve(queue.size());
+
+    for (const Entry &entry : queue)
+        result.push_back(entry.index);
+
+    return result;
+}
+
+
 bool Scheduler::done() const
 {
     return completed_requested == requested.size();

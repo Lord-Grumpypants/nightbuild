@@ -1,5 +1,4 @@
 #include "toml.hpp"
-#include "tui.hpp"
 #include "cli.hpp"
 #include "scheduler.hpp"
 #include "fsevents.hpp"
@@ -3794,7 +3793,6 @@ bool compile_command_stale(
     const CommandDatabase &database,
     const CommandRecord &command,
     const std::vector<fs::path> &changed_paths) {
-
     std::string source =
         command_source(
             database,
@@ -4652,7 +4650,7 @@ void generate(
     }
 
     std::string project_hash =
-        project_fingerprint.str();
+        sha256_text(project_fingerprint.str());
 
     append_command_database(
         paths.commands,
@@ -4786,10 +4784,7 @@ int build_object_target(
 
         if (!stale) {
             std::string current =
-                cached_sha256_file(
-                    database,
-                    command.source_hash_index,
-                    source);
+                sha256_file(source);
 
             stale =
                 !hash_equals(
@@ -6486,4 +6481,4 @@ int main(
     }
 
     return 0;
-}//meow//meow//meow//meow//meow
+}//meow//meow//meow//meow//meow//meow
