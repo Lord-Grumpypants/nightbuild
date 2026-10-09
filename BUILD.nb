@@ -15,7 +15,6 @@ executable("nightbuild"):
         "src/main.cpp",
         "src/cli.cpp",
         "src/toml.cpp",
-        "src/tui.cpp",
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
@@ -40,9 +39,7 @@ executable("nightbuild"):
         "-Wno-profile-instr-unprofiled",
     ]
 
-    pkg_config = [
-        "notcurses",
-    ]
+    pkg_config = []
 
     ldflags = [
         "-flto=full",
@@ -68,7 +65,6 @@ executable("nightbuild-pgo"):
         "src/main.cpp",
         "src/cli.cpp",
         "src/toml.cpp",
-        "src/tui.cpp",
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
@@ -89,9 +85,7 @@ executable("nightbuild-pgo"):
         "-fprofile-instr-generate",
     ]
 
-    pkg_config = [
-        "notcurses",
-    ]
+    pkg_config = []
 
     ldflags = [
         "-fprofile-instr-generate",
@@ -115,19 +109,3 @@ executable("test"):
     sources = [
         "tests/main.cpp",
     ]
-
-action("generate-pgo"):
-    dependencies = [
-        "nightbuild-pgo",
-    ]
-
-    action = [
-        "python3",
-        "scripts/generate_pgo.py",
-    ]
-
-    inputs = [
-        "scripts/generate_pgo.py",
-    ]
-
-    output = "nightbuild.profdata"

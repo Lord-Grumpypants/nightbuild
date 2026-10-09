@@ -71,7 +71,6 @@ def install_packages(brew):
     packages = [
         "llvm",
         "lld",
-        "notcurses",
         "python@3.14",
         "git",
     ]
