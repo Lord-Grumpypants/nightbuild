@@ -1739,6 +1739,7 @@ std::vector<std::string> link_flags(
 
 fs::path toolchain_output_path(
     const BuildPaths &paths,
+    const toml::Target &target,
     const std::string &source,
     const Toolchain &toolchain) {
 
@@ -1751,7 +1752,7 @@ fs::path toolchain_output_path(
     }
 
     fs::path result =
-        paths.objects / relative;
+        paths.objects / target.name / relative;
 
     result.replace_extension(
         toolchain.output_extension);
@@ -1761,6 +1762,7 @@ fs::path toolchain_output_path(
 
 fs::path toolchain_dependency_path(
     const BuildPaths &paths,
+    const toml::Target &target,
     const std::string &source) {
 
     fs::path relative(source);
@@ -1772,7 +1774,7 @@ fs::path toolchain_dependency_path(
     }
 
     fs::path result =
-        paths.objects / relative;
+        paths.objects / target.name / relative;
 
     result.replace_extension(".d");
 
@@ -1804,13 +1806,15 @@ std::vector<std::string> compile_command(
 
     fs::path object =
         toolchain_output_path(
-            paths,
-            source,
+                paths,
+                target,
+                source,
             *toolchain);
 
     fs::path dependency =
         toolchain_dependency_path(
             paths,
+            target,
             source);
 
     std::vector<std::string> command = {
@@ -1891,6 +1895,7 @@ std::vector<fs::path> target_objects(
         objects.push_back(
             toolchain_output_path(
                 paths,
+                target,
                 source,
                 *toolchain));
     }
@@ -4027,13 +4032,15 @@ std::vector<BuildRecord> make_build_records(
         record.output =
             toolchain_output_path(
                 paths,
+                target,
                 source,
                 *toolchain).string();
 
         record.dependency =
             toolchain_dependency_path(
-                paths,
-                source).string();
+            paths,
+            target,
+            source).string();
 
         if (file_exists(
                 record.source)) {
