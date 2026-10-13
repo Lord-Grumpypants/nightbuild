@@ -1,52 +1,88 @@
+.DEFAULT_GOAL := all
+.DELETE_ON_ERROR:
+.SUFFIXES:
+
 CXX := clang++
-PKG_CONFIG := pkg-config
+CC := clang
+AR := ar
 
 TARGET := nightbuild
-BOOTSTRAP_DIR := bootstrap
+BUILD_DIR := bootstrap
+XXHASH_DIR := third_party/xxhash
+XXHASH_LIB := $(BUILD_DIR)/libxxhash.a
 
-NOTCURSES_CFLAGS := $(shell $(PKG_CONFIG) --cflags notcurses)
-NOTCURSES_LIBS := $(shell $(PKG_CONFIG) --libs notcurses)
+CXX_SOURCES := \
+	src/main.cpp \
+	src/cli.cpp \
+	src/toml.cpp \
+	src/scheduler.cpp \
+	src/fsevents.cpp \
+	src/compile_commands.cpp
 
-CXXFLAGS := \
-    -std=c++23 \
-    -O3 \
-    -march=native \
-    -mtune=native \
-    -flto=full \
-    -fstrict-aliasing \
-    -fomit-frame-pointer \
-    -Iinclude \
-    $(NOTCURSES_CFLAGS)
+C_SOURCES := \
+	$(XXHASH_DIR)/xxhash.c
 
-LDFLAGS := \
-    -O3 \
-    -march=native \
-    -mtune=native \
-    -flto=full
-
-LDLIBS := \
-    $(NOTCURSES_LIBS) \
-    -framework CoreServices
-
-SOURCES := $(wildcard src/*.cpp)
-OBJECTS := $(SOURCES:src/%.cpp=$(BOOTSTRAP_DIR)/%.o)
+CXX_OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(CXX_SOURCES))
+C_OBJECTS := $(patsubst $(XXHASH_DIR)/%.c,$(BUILD_DIR)/xxhash/%.o,$(C_SOURCES))
+OBJECTS := $(CXX_OBJECTS) $(C_OBJECTS)
 DEPFILES := $(OBJECTS:.o=.d)
 
-.PHONY: all clean
+CPPFLAGS := -Isrc -Iinclude -I$(XXHASH_DIR)
+
+COMMON_FLAGS := \
+	-O3 \
+	-march=native \
+	-mtune=native \
+	-fstrict-aliasing \
+	-fomit-frame-pointer
+
+CXXFLAGS := \
+	-std=c++23 \
+	$(COMMON_FLAGS) \
+	-flto=full \
+	-fno-rtti
+
+CFLAGS := \
+	-std=c11 \
+	$(COMMON_FLAGS)
+
+LDFLAGS := \
+	-O3 \
+	-march=native \
+	-mtune=native \
+	-flto=full \
+	-Wl,-dead_strip
+
+LDLIBS := -framework CoreServices
+
+.PHONY: all clean rebuild
 
 all: $(TARGET)
 
-$(TARGET): $(OBJECTS)
-	@printf '  LINK    %s\\n' "$@"
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o "$@"
+$(TARGET): $(CXX_OBJECTS) $(XXHASH_LIB)
+	@printf '  LINK    %s\n' "$@"
+	$(CXX) $(LDFLAGS) $(CXX_OBJECTS) $(XXHASH_LIB) $(LDLIBS) -o "$@"
 
-$(BOOTSTRAP_DIR)/%.o: src/%.cpp
-	@mkdir -p $(BOOTSTRAP_DIR)
-	@printf '  CXX     %s\\n' "$<"
-	$(CXX) $(CXXFLAGS) -MMD -MP -c "$<" -o "$@"
+$(BUILD_DIR)/%.o: src/%.cpp
+	@mkdir -p "$(@D)"
+	@printf '  CXX     %s\n' "$<"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c "$<" -o "$@"
 
--include $(DEPFILES)
+$(BUILD_DIR)/xxhash/%.o: $(XXHASH_DIR)/%.c
+	@mkdir -p "$(@D)"
+	@printf '  CC      %s\n' "$<"
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(XXHASH_LIB): $(C_OBJECTS)
+	@printf '  AR      %s\n' "$@"
+	@mkdir -p "$(@D)"
+	rm -f "$@"
+	$(AR) rcs "$@" $(C_OBJECTS)
+
+rebuild: clean all
 
 clean:
-	@printf '  CLEAN\\n'
-	rm -rf $(BOOTSTRAP_DIR) $(TARGET)
+	@printf '  CLEAN   %s\n' "$(BUILD_DIR) $(TARGET)"
+	rm -rf "$(BUILD_DIR)" "$(TARGET)"
+
+-include $(DEPFILES)

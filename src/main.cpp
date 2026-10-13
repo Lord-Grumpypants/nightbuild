@@ -4,9 +4,9 @@
 #include "fsevents.hpp"
 #include "command.hpp"
 #include "compile_commands.hpp"
+#include "xxhash.h"
 
 #include <algorithm>
-#include <CommonCrypto/CommonDigest.h>
 #include <array>
 #include <cerrno>
 #include <cctype>
@@ -19,6 +19,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iomanip>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -588,132 +589,57 @@ ProcessResult run_capture_text(
     return result;
 }
 
-std::string sha256_file(
-    const fs::path &path) {
-
-    std::ifstream file(
-        path,
-        std::ios::binary);
-
-    if (!file)
-        fail(
-            "failed to open file for hashing: " +
-            path.string());
-
-    CC_SHA256_CTX context;
-
-    if (CC_SHA256_Init(&context) != 1)
-        fail(
-            "failed to initialize SHA-256: " +
-            path.string());
-
-    std::array<char, 1024 * 1024> buffer;
-
-    while (file) {
-        file.read(
-            buffer.data(),
-            buffer.size());
-
-        std::streamsize count =
-            file.gcount();
-
-        if (count > 0) {
-            if (CC_SHA256_Update(
-                    &context,
-                    buffer.data(),
-                    static_cast<size_t>(count)) != 1) {
-                fail(
-                    "failed to hash file: " +
-                    path.string());
-            }
-        }
-    }
-
-    if (!file.eof())
-        fail(
-            "failed to read file for hashing: " +
-            path.string());
-
-    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
-
-    if (CC_SHA256_Final(
-            digest,
-            &context) != 1) {
-        fail(
-            "failed to finalize SHA-256: " +
-            path.string());
-    }
-
-    static constexpr char hex[] =
-        "0123456789abcdef";
-
-    std::string hash;
-    hash.reserve(
-        CC_SHA256_DIGEST_LENGTH * 2);
-
-    for (unsigned char byte : digest) {
-        hash.push_back(
-            hex[byte >> 4]);
-        hash.push_back(
-            hex[byte & 0x0f]);
-    }
-
-    return hash;
+std::string xxh3_hex(XXH64_hash_t value) {
+    std::ostringstream result;
+    result << std::hex << std::nouppercase
+           << std::setw(16) << std::setfill('0')
+           << static_cast<std::uint64_t>(value);
+    return result.str();
 }
 
+std::string xxh3_file(const fs::path &path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
+        fail("failed to open file for hashing: " + path.string());
 
-std::string sha256_text(
-    const std::string &text) {
+    XXH3_state_t *state = XXH3_createState();
+    if (!state)
+        fail("failed to allocate XXH3 state");
 
-    char temp_name[] =
-        "/tmp/nightbuild-hash-XXXXXX";
-
-    int fd =
-        mkstemp(temp_name);
-
-    if (fd < 0)
-        fail("mkstemp failed");
-
-    size_t total = 0;
-
-    while (total < text.size()) {
-        ssize_t written =
-            write(
-                fd,
-                text.data() + total,
-                text.size() - total);
-
-        if (written < 0) {
-            if (errno == EINTR)
-                continue;
-
-            close(fd);
-            unlink(temp_name);
-
-            fail(
-                "failed to write temporary hash file");
-        }
-
-        if (written == 0) {
-            close(fd);
-            unlink(temp_name);
-
-            fail(
-                "failed to make progress writing temporary hash file");
-        }
-
-        total +=
-            static_cast<size_t>(written);
+    if (XXH3_64bits_reset(state) != XXH_OK) {
+        XXH3_freeState(state);
+        fail("failed to initialize XXH3: " + path.string());
     }
 
-    close(fd);
+    std::array<char, 1024 * 1024> buffer{};
 
-    std::string hash =
-        sha256_file(temp_name);
+    while (file) {
+        file.read(buffer.data(),
+                  static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize count = file.gcount();
 
-    unlink(temp_name);
+        if (count > 0 &&
+            XXH3_64bits_update(
+                state, buffer.data(),
+                static_cast<std::size_t>(count)) != XXH_OK) {
+            XXH3_freeState(state);
+            fail("failed to hash file: " + path.string());
+        }
+    }
 
-    return hash;
+    if (!file.eof()) {
+        XXH3_freeState(state);
+        fail("failed to read file for hashing: " + path.string());
+    }
+
+    const XXH64_hash_t digest = XXH3_64bits_digest(state);
+    XXH3_freeState(state);
+    return xxh3_hex(digest);
+}
+
+std::string xxh3_text(const std::string &text) {
+    return xxh3_hex(
+        XXH3_64bits(text.data(), text.size()));
 }
 
 std::string read_file(
@@ -2350,134 +2276,41 @@ std::string normalize_hash(
     return result;
 }
 
-std::array<uint8_t, 32> decode_hash(
-    const std::string &text) {
-
-    std::array<uint8_t, 32> result{};
-
-    std::string value =
-        normalize_hash(text);
-
-    if (value.size() != 64)
-        fail("invalid SHA-256 length");
-
-    auto hex =
-        [](char c) -> int {
-            if (c >= '0' && c <= '9')
-                return c - '0';
-
-            if (c >= 'a' && c <= 'f')
-                return 10 + c - 'a';
-
-            return -1;
-        };
-
-    for (size_t i = 0; i < 32; ++i) {
-        int high = hex(value[i * 2]);
-        int low = hex(value[i * 2 + 1]);
-
-        if (high < 0 || low < 0)
-            fail("invalid SHA-256");
-
-        result[i] =
-            static_cast<uint8_t>(
-                (high << 4) | low);
-    }
-
-    return result;
+std::string hash_hex(const HashRecord &record) {
+    return xxh3_hex(record.digest);
 }
 
-std::string cached_sha256_file(
+std::string cached_xxh3_file(
     MutableCommandDatabase &database,
     uint64_t hash_index,
     const fs::path &path) {
 
-    if (hash_index >=
-        database.header->hash_count) {
+    if (hash_index >= database.header->hash_count)
         fail("invalid hash index");
-    }
 
     struct stat st{};
+    if (stat(path.c_str(), &st) != 0)
+        fail("failed to stat file: " + path.string());
 
-    if (stat(
-            path.c_str(),
-            &st) != 0) {
-        fail(
-            "failed to stat file: " +
-            path.string());
-    }
-
-    HashRecord &record =
-        database.hashes[hash_index];
-
-    std::int64_t seconds =
-        static_cast<std::int64_t>(
-            st.st_mtimespec.tv_sec);
-
-    std::int32_t nanoseconds =
-        static_cast<std::int32_t>(
-            st.st_mtimespec.tv_nsec);
-
-    static constexpr char hex[] =
-        "0123456789abcdef";
+    HashRecord &record = database.hashes[hash_index];
+    const std::int64_t seconds =
+        static_cast<std::int64_t>(st.st_mtimespec.tv_sec);
+    const std::int32_t nanoseconds =
+        static_cast<std::int32_t>(st.st_mtimespec.tv_nsec);
 
     if (record.mtime_seconds == seconds &&
         record.mtime_nanoseconds == nanoseconds) {
-
-        std::string result;
-        result.reserve(64);
-
-        for (std::uint8_t byte :
-             record.digest) {
-            result.push_back(
-                hex[byte >> 4]);
-            result.push_back(
-                hex[byte & 0x0f]);
-        }
-
-        return result;
+        return hash_hex(record);
     }
 
-    std::string hash =
-        sha256_file(path);
+    const std::string hash = xxh3_file(path);
+    if (hash.size() != 16)
+        fail("invalid XXH3 hash for: " + path.string());
 
-    if (hash.size() != 64)
-        fail(
-            "invalid SHA-256 for: " +
-            path.string());
-
-    for (std::size_t i = 0;
-         i < 32;
-         ++i) {
-
-        auto hex_value =
-            [](char c) -> std::uint8_t {
-                if (c >= '0' && c <= '9')
-                    return static_cast<std::uint8_t>(
-                        c - '0');
-
-                if (c >= 'a' && c <= 'f')
-                    return static_cast<std::uint8_t>(
-                        c - 'a' + 10);
-
-                if (c >= 'A' && c <= 'F')
-                    return static_cast<std::uint8_t>(
-                        c - 'A' + 10);
-
-                fail("invalid SHA-256");
-            };
-
-        record.digest[i] =
-            static_cast<std::uint8_t>(
-                (hex_value(hash[i * 2]) << 4) |
-                hex_value(hash[i * 2 + 1]));
-    }
-
-    record.mtime_seconds =
-        seconds;
-
-    record.mtime_nanoseconds =
-        nanoseconds;
+    record.digest = static_cast<std::uint64_t>(
+        std::stoull(hash, nullptr, 16));
+    record.mtime_seconds = seconds;
+    record.mtime_nanoseconds = nanoseconds;
 
     return hash;
 }
@@ -2485,49 +2318,30 @@ std::string cached_sha256_file(
 bool hash_equals(
     const HashRecord &record,
     const std::string &hash) {
+    if (hash.size() != 16)
+        return false;
 
-    auto decoded =
-        decode_hash(hash);
-
-    return std::memcmp(
-        record.digest,
-        decoded.data(),
-        32) == 0;
+    try {
+        return record.digest ==
+            static_cast<std::uint64_t>(
+                std::stoull(hash, nullptr, 16));
+    } catch (const std::exception &) {
+        return false;
+    }
 }
 
 void store_hash(
     HashRecord &record,
     const std::string &hash) {
+    if (hash.size() != 16)
+        fail("invalid XXH3 hash");
 
-    auto decoded =
-        decode_hash(hash);
-
-    std::memcpy(
-        record.digest,
-        decoded.data(),
-        32);
-}
-
-std::string hash_hex(
-    const HashRecord &record) {
-
-    static constexpr char hex[] =
-        "0123456789abcdef";
-
-    std::string result;
-    result.reserve(64);
-
-    for (uint8_t byte :
-         record.digest) {
-
-        result +=
-            hex[(byte >> 4) & 0xf];
-
-        result +=
-            hex[byte & 0xf];
+    try {
+        record.digest = static_cast<std::uint64_t>(
+            std::stoull(hash, nullptr, 16));
+    } catch (const std::exception &) {
+        fail("invalid XXH3 hash");
     }
-
-    return result;
 }
 
 size_t align_up(
@@ -2549,7 +2363,7 @@ std::string make_input_hash(
     std::ostringstream fingerprint;
 
     fingerprint
-        << "nightbuild-inputs-v1\n";
+        << "nightbuild-inputs-v2\n";
 
     for (const auto &object :
          link_inputs) {
@@ -2566,11 +2380,11 @@ std::string make_input_hash(
         }
 
         fingerprint
-            << sha256_file(object)
+            << xxh3_file(object)
             << "\n";
     }
 
-    return sha256_text(
+    return xxh3_text(
         fingerprint.str());
 }
 
@@ -2765,7 +2579,7 @@ std::string dependency_hash(
     std::ostringstream fingerprint;
 
     fingerprint
-        << "nightbuild-dependencies-v3\n";
+        << "nightbuild-dependencies-v4\n";
 
     for (const auto &path :
          dependencies) {
@@ -2782,11 +2596,11 @@ std::string dependency_hash(
         }
 
         fingerprint
-            << sha256_file(path)
+            << xxh3_file(path)
             << "\n";
     }
 
-    return sha256_text(
+    return xxh3_text(
         fingerprint.str());
 }
 
@@ -2796,7 +2610,7 @@ std::string hash_for_arguments(
     std::ostringstream fingerprint;
 
     fingerprint
-        << "nightbuild-command-v1\n";
+        << "nightbuild-command-v2\n";
 
     for (const auto &arg :
          args) {
@@ -2808,7 +2622,7 @@ std::string hash_for_arguments(
             << "\n";
     }
 
-    return sha256_text(
+    return xxh3_text(
         fingerprint.str());
 }
 
@@ -3828,7 +3642,7 @@ bool compile_command_stale(
     }
 
     std::string current_source_hash =
-        sha256_file(source_file);
+        xxh3_file(source_file);
 
     if (!command_hash_matches(
             database,
@@ -3906,7 +3720,7 @@ void update_compile_hashes(
             command.dependency_path_offset);
 
     std::string source_hash =
-        sha256_file(
+        xxh3_file(
             source_path_value);
 
     update_hash(
@@ -3965,10 +3779,10 @@ std::string generation_configuration_hash(
     std::ostringstream fingerprint;
 
     fingerprint
-        << "nightbuild-configuration-v2\n";
+        << "nightbuild-configuration-v3\n";
 
     fingerprint
-        << sha256_file(manifest)
+        << xxh3_file(manifest)
         << "\n";
 
     for (const auto &include :
@@ -3996,11 +3810,11 @@ std::string generation_configuration_hash(
         }
 
         fingerprint
-            << sha256_file(path)
+            << xxh3_file(path)
             << "\n";
     }
 
-    return sha256_text(
+    return xxh3_text(
         fingerprint.str());
 }
 
@@ -4158,7 +3972,7 @@ std::vector<BuildRecord> make_build_records(
             ).string();
 
         record.source_hash =
-            sha256_file(
+            xxh3_file(
                 record.source);
 
         record.state_hash =
@@ -4225,7 +4039,7 @@ std::vector<BuildRecord> make_build_records(
                 record.source)) {
 
             record.source_hash =
-                sha256_file(
+                xxh3_file(
                     record.source);
 
         } else if (!source_is_generated(
@@ -4650,7 +4464,7 @@ void generate(
     }
 
     std::string project_hash =
-        sha256_text(project_fingerprint.str());
+        xxh3_text(project_fingerprint.str());
 
     append_command_database(
         paths.commands,
@@ -4696,7 +4510,7 @@ bool manifest_changed(
     }
 
     std::string current =
-        sha256_text(
+        xxh3_text(
             fingerprint.str());
 
     std::string stored =
@@ -4784,7 +4598,7 @@ int build_object_target(
 
         if (!stale) {
             std::string current =
-                sha256_file(source);
+                xxh3_file(source);
 
             stale =
                 !hash_equals(
@@ -4834,7 +4648,7 @@ int build_object_target(
         if (result != 0)
             return result;
 
-        cached_sha256_file(
+        cached_xxh3_file(
             database,
             command.source_hash_index,
             source);
@@ -5504,7 +5318,7 @@ int compile_parallel_mapped(
             update_hash(
                 database,
                 command.source_hash_index,
-                cached_sha256_file(
+                cached_xxh3_file(
                     database,
                     command.source_hash_index,
                     source));
@@ -6385,6 +6199,7 @@ int main(
     int argc,
     char **argv)
 {
+    try {
     CLIResult cli =
         parse_cli(
             argc,
@@ -6474,4 +6289,8 @@ int main(
     }
 
     return 0;
-}//meow//meow//meow//meow//meow//meow
+    } catch (const std::exception &e) {
+        std::cerr << "nightbuild: " << e.what() << '\n';
+        return 1;
+    }
+}

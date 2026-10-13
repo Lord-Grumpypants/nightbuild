@@ -1,6 +1,6 @@
 #include "toml.hpp"
+#include "xxhash.h"
 
-#include <CommonCrypto/CommonDigest.h>
 
 #include <algorithm>
 #include <cctype>
@@ -2316,31 +2316,14 @@ private:
     }
 };
 
-std::string sha256_bytes(
-    const std::string& data) {
-
-    unsigned char digest[
-        CC_SHA256_DIGEST_LENGTH
-    ];
-
-    CC_SHA256(
-        data.data(),
-        static_cast<CC_LONG>(
-            data.size()),
-        digest);
+std::string xxh3_bytes(const std::string &data) {
+    const XXH64_hash_t digest =
+        XXH3_64bits(data.data(), data.size());
 
     std::ostringstream result;
-
-    for (unsigned char byte :
-         digest) {
-
-        result << std::hex
-               << std::setw(2)
-               << std::setfill('0')
-               << static_cast<unsigned int>(
-                      byte);
-    }
-
+    result << std::hex << std::nouppercase
+           << std::setw(16) << std::setfill('0')
+           << static_cast<std::uint64_t>(digest);
     return result.str();
 }
 
@@ -2375,7 +2358,7 @@ std::string configuration_hash(
         fingerprint.append(contents);
     }
 
-    return sha256_bytes(
+    return xxh3_bytes(
         fingerprint);
 }
 

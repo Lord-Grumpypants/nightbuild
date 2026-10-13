@@ -1,413 +1,344 @@
 #!/bin/bash
-
-set -u
+set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-
 ROUNDS="${1:-15}"
-
 NIGHTBUILD="$ROOT/nightbuild"
 NIGHTBUILD_BUILD="$ROOT/build"
-
 NINJA_BUILD="$ROOT/ninja-build"
-
 SAMU_BUILD="$ROOT/samu-build"
+
+NINJA_BIN="$NINJA_BUILD/nightbuild"
+SAMU_BIN="$SAMU_BUILD/nightbuild"
 
 declare -a NIGHTBUILD_TIMES=()
 declare -a NINJA_TIMES=()
 declare -a SAMU_TIMES=()
 
-echo "Requesting sudo access for benchmark cache purging..."
+FAILURES=0
+RUN_TIME=""
 
-if ! sudo -v; then
-echo "ERROR: sudo authentication failed"
-exit 1
+if ! [[ "$ROUNDS" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'Usage: %s [positive-round-count]\n' "$0" >&2
+    exit 2
 fi
 
-run_timed() {
-local label="$1"
-shift
-
-
-local tmp
-tmp="$(mktemp)"
-
-echo
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  $label"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-/usr/bin/time -p "$@" 2>"$tmp"
-local status=$?
-
-if [[ $status -ne 0 ]]; then
-    cat "$tmp" >&2
-
-    local result
-    result="$(awk '/^real / { print $2 }' "$tmp")"
-
-    rm -f "$tmp"
-
-    echo
-    echo "  → FAILED (exit $status)"
-
-    RUN_TIME="FAILED"
-    return "$status"
-fi
-
-local result
-result="$(awk '/^real / { print $2 }' "$tmp")"
-
-rm -f "$tmp"
-
-echo
-echo "  → ${result}s"
-
-RUN_TIME="$result"
-return 0
-
-
-}
-
-cold_start() {
-sudo purge >/dev/null 2>&1 || true
-}
-
-shuffle_competitors() {
-COMPETITORS=(
-"NightBuild"
-"Ninja"
-"samu"
-)
-
-
-local i
-local j
-local tmp
-
-for ((i=${#COMPETITORS[@]}-1; i>0; i--)); do
-    j=$((RANDOM % (i + 1)))
-
-    tmp="${COMPETITORS[i]}"
-    COMPETITORS[i]="${COMPETITORS[j]}"
-    COMPETITORS[j]="$tmp"
-done
-
-
-}
-
-run_nightbuild() {
-rm -rf "$NIGHTBUILD_BUILD"
-
-
-"$NIGHTBUILD" gen -C "$NIGHTBUILD_BUILD" >/dev/null
-
-cold_start
-
-if run_timed "NightBuild · clean build" \
-    "$NIGHTBUILD" build -C "$NIGHTBUILD_BUILD" nightbuild; then
-
-    # if [[ ! -x "$NIGHTBUILD_BUILD/nightbuild" ]]; then
-    #     echo "ERROR: NightBuild did not produce nightbuild"
-    #     return 1
-    # fi
-
-    NIGHTBUILD_TIMES+=("$RUN_TIME")
-else
-    return 1
-fi
-
-
-}
-
-run_ninja() {
-rm -rf \
-"$NINJA_BUILD/obj" \
-"$NINJA_BUILD/nightbuild" \
-"$NINJA_BUILD/.ninja_log" \
-"$NINJA_BUILD/.ninja_deps"
-
-
-cold_start
-
-if run_timed "Ninja · clean build" \
-    ninja -C "$NINJA_BUILD"; then
-
-    if [[ ! -x "$NINJA_BUILD/nightbuild" ]]; then
-        echo "ERROR: Ninja did not produce nightbuild"
-        return 1
-    fi
-
-    NINJA_TIMES+=("$RUN_TIME")
-else
-    return 1
-fi
-
-
-}
-
-run_samu() {
-rm -rf \
-"$SAMU_BUILD/obj" \
-"$SAMU_BUILD/nightbuild" \
-"$SAMU_BUILD/.ninja_log" \
-"$SAMU_BUILD/.ninja_deps"
-
-
-cold_start
-
-if run_timed "samu · clean build" \
-    samu -C "$SAMU_BUILD" -j "$(sysctl -n hw.logicalcpu)"; then
-
-    if [[ ! -x "$SAMU_BUILD/nightbuild" ]]; then
-        echo "ERROR: samu did not produce nightbuild"
-        return 1
-    fi
-
-    SAMU_TIMES+=("$RUN_TIME")
-else
-    return 1
-fi
-
-
-}
-
-run_competitor() {
-local competitor="$1"
-
-
-case "$competitor" in
-    NightBuild)
-        run_nightbuild
-        ;;
-    Ninja)
-        run_ninja
-        ;;
-    samu)
-        run_samu
-        ;;
-    *)
-        echo "ERROR: unknown competitor: $competitor"
-        return 1
-        ;;
-esac
-
-
-}
-
-mean() {
-printf '%s\n' "$@" |
-awk '
-{
-sum += $1
-count++
-}
-END {
-if (count)
-printf "%.3f", sum / count
-else
-printf "0.000"
-}
-'
-}
-
-median() {
-printf '%s\n' "$@" |
-sort -n |
-awk '
-{
-values[NR] = $1
-}
-END {
-if (NR == 0) {
-printf "0.000"
-} else if (NR % 2 == 1) {
-printf "%.3f", values[(NR + 1) / 2]
-} else {
-printf "%.3f", 
-(values[NR / 2] + values[NR / 2 + 1]) / 2
-}
-}
-'
-}
-
-stddev() {
-local avg="$1"
-shift
-
-
-printf '%s\n' "$@" |
-    awk -v mean="$avg" '
-        {
-            sum += ($1 - mean) * ($1 - mean)
-            count++
+for tool in "$NIGHTBUILD" ninja samu python3; do
+    if [[ "$tool" == */* ]]; then
+        [[ -x "$tool" ]] || {
+            printf 'Required executable not found: %s\n' "$tool" >&2
+            exit 1
         }
-        END {
-            if (count > 1)
-                printf "%.3f", sqrt(sum / (count - 1))
-            else
-                printf "0.000"
-        }
-    '
-
-
-}
-
-cv() {
-local avg="$1"
-local deviation="$2"
-
-
-awk -v mean="$avg" -v sd="$deviation" '
-    BEGIN {
-        if (mean > 0)
-            printf "%.2f%%", (sd / mean) * 100
-        else
-            printf "0.00%%"
-    }
-'
-
-
-}
-
-print_statistics() {
-local name="$1"
-shift
-
-
-local avg
-local med
-local sd
-local variation
-
-avg="$(mean "$@")"
-med="$(median "$@")"
-sd="$(stddev "$avg" "$@")"
-variation="$(cv "$avg" "$sd")"
-
-printf "  %-10s " "$name"
-printf "avg %ss  " "$avg"
-printf "median %ss  " "$med"
-printf "σ %ss  " "$sd"
-printf "CV %s\n" "$variation"
-
-printf "             rounds: "
-printf '%ss  ' "$@"
-printf "\n"
-
-
-}
-
-echo
-
-echo "╔════════════════════════════════════════════════════╗"
-echo "║              NIGHTBUILD TOURNAMENT                ║"
-echo "╚════════════════════════════════════════════════════╝"
-
-echo
-echo "Rounds: $ROUNDS"
-echo "Project: $ROOT"
-echo
-echo "Competitors:"
-echo "  1. NightBuild"
-echo "  2. Ninja"
-echo "  3. samu"
-echo
-echo "Order: randomized every round"
-echo "Cache: sudo purge before every build"
-echo
-
-for ((round=1; round<=ROUNDS; round++)); do
-
-
-echo
-echo "╔════════════════════════════════════════════════════╗"
-printf "║                 ROUND %-2d                           ║\n" "$round"
-echo "╚════════════════════════════════════════════════════╝"
-
-shuffle_competitors
-
-echo
-printf "  Order: %s → %s → %s\n" \
-    "${COMPETITORS[0]}" \
-    "${COMPETITORS[1]}" \
-    "${COMPETITORS[2]}"
-
-for competitor in "${COMPETITORS[@]}"; do
-    if ! run_competitor "$competitor"; then
-        echo
-        echo "Tournament aborted because $competitor failed."
+    elif ! command -v "$tool" >/dev/null 2>&1; then
+        printf 'Required tool not found: %s\n' "$tool" >&2
         exit 1
     fi
 done
 
+printf 'Requesting sudo access for cache purging...\n'
+sudo -v || exit 1
 
+cold_start() {
+    if sudo purge >/dev/null 2>&1; then
+        return 0
+    fi
+
+    printf 'WARNING: macOS cache purge failed; this run may not be fully cold.\n' >&2
+    return 1
+}
+
+run_timed() {
+    local tmp status real
+
+    tmp="$(mktemp)" || {
+        RUN_TIME="FAILED"
+        return 1
+    }
+
+    printf '    '
+    /usr/bin/time -p "$@" 2>"$tmp"
+    status=$?
+
+    if (( status != 0 )); then
+        cat "$tmp" >&2
+        rm -f "$tmp"
+        RUN_TIME="FAILED"
+        return 1
+    fi
+
+    real="$(awk '$1 == "real" { print $2; exit }' "$tmp")"
+    rm -f "$tmp"
+
+    if [[ -z "$real" ]]; then
+        printf 'Could not read elapsed time.\n' >&2
+        RUN_TIME="FAILED"
+        return 1
+    fi
+
+    RUN_TIME="$real"
+    printf 'real %ss\n' "$real"
+    return 0
+}
+
+verify_new_output() {
+    local path="$1"
+    local started="$2"
+
+    if [[ ! -f "$path" || ! -x "$path" ]]; then
+        printf 'ERROR: expected executable missing or not executable: %s\n' "$path" >&2
+        return 1
+    fi
+
+    local mtime
+    mtime="$(stat -f '%m' "$path" 2>/dev/null)" || {
+        printf 'ERROR: cannot inspect output modification time: %s\n' "$path" >&2
+        return 1
+    }
+
+    if (( mtime < started )); then
+        printf 'ERROR: output predates this build: %s\n' "$path" >&2
+        return 1
+    fi
+
+    return 0
+}
+run_nightbuild() {
+    local started before_mtime after_mtime
+
+    printf '  NightBuild: '
+
+    if [[ ! -x "$NIGHTBUILD" ]]; then
+        printf 'FAILED: NightBuild executable missing: %s\n' "$NIGHTBUILD"
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    rm -rf "$NIGHTBUILD_BUILD" || {
+        printf 'FAILED to clean build directory\n'
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    }
+
+    if ! "$NIGHTBUILD" gen -C "$NIGHTBUILD_BUILD" >/dev/null; then
+        printf 'FAILED during generation\n'
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    before_mtime="$(stat -f '%m' "$NIGHTBUILD")" || {
+        printf 'FAILED to inspect NightBuild executable\n'
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    }
+
+    cold_start || true
+    started="$(date +%s)"
+
+    if ! run_timed "$NIGHTBUILD" build -C "$NIGHTBUILD_BUILD" nightbuild; then
+        printf '    NightBuild build command failed\n' >&2
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    if [[ ! -x "$NIGHTBUILD" ]]; then
+        printf 'ERROR: NightBuild executable missing after build\n' >&2
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    after_mtime="$(stat -f '%m' "$NIGHTBUILD")" || {
+        printf 'ERROR: cannot inspect NightBuild executable after build\n' >&2
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    }
+
+    if [[ "$after_mtime" -le "$before_mtime" ]]; then
+        printf 'ERROR: NightBuild executable modification time did not advance\n' >&2
+        NIGHTBUILD_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    NIGHTBUILD_TIMES+=("$RUN_TIME")
+}
+
+run_ninja() {
+    local started
+    printf '  Ninja: '
+
+    rm -rf "$NINJA_BUILD/obj" \
+           "$NINJA_BIN" \
+           "$NINJA_BUILD/.ninja_log" \
+           "$NINJA_BUILD/.ninja_deps" || {
+        printf 'FAILED to clean outputs\n'
+        NINJA_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    }
+
+    cold_start || true
+    started="$(date +%s)"
+
+    if ! run_timed ninja -C "$NINJA_BUILD"; then
+        NINJA_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    if ! verify_new_output "$NINJA_BIN" "$started"; then
+        NINJA_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    NINJA_TIMES+=("$RUN_TIME")
+}
+
+run_samu() {
+    local started
+    printf '  samu: '
+
+    rm -rf "$SAMU_BUILD/obj" \
+           "$SAMU_BIN" \
+           "$SAMU_BUILD/.ninja_log" \
+           "$SAMU_BUILD/.ninja_deps" || {
+        printf 'FAILED to clean outputs\n'
+        SAMU_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    }
+
+    cold_start || true
+    started="$(date +%s)"
+
+    if ! run_timed samu -C "$SAMU_BUILD" -j "$(sysctl -n hw.logicalcpu)"; then
+        SAMU_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    if ! verify_new_output "$SAMU_BIN" "$started"; then
+        SAMU_TIMES+=(FAILED)
+        ((FAILURES += 1))
+        return
+    fi
+
+    SAMU_TIMES+=("$RUN_TIME")
+}
+
+shuffle_competitors() {
+    local i j tmp
+    SHUFFLED=("NightBuild" "Ninja" "samu")
+
+    for ((i=${#SHUFFLED[@]}-1; i>0; i--)); do
+        j=$((RANDOM % (i + 1)))
+        tmp="${SHUFFLED[i]}"
+        SHUFFLED[i]="${SHUFFLED[j]}"
+        SHUFFLED[j]="$tmp"
+    done
+}
+
+print_stats() {
+    local name="$1"
+    shift
+    local -a values=("$@")
+    local valid=()
+    local value
+
+    for value in "${values[@]}"; do
+        [[ "$value" == "FAILED" ]] || valid+=("$value")
+    done
+
+    if (( ${#valid[@]} == 0 )); then
+        printf '%-10s no successful runs (%d failed)\n' "$name" "${#values[@]}"
+        return
+    fi
+
+    printf '%s\n' "${valid[@]}" | python3 -c '
+import statistics
+import sys
+
+v = sorted(float(line) for line in sys.stdin if line.strip())
+mean = statistics.mean(v)
+median = statistics.median(v)
+sd = statistics.stdev(v) if len(v) > 1 else 0.0
+cv = 100.0 * sd / mean if mean else 0.0
+
+print(f"  avg {mean:.3f}s  median {median:.3f}s  σ {sd:.3f}s  CV {cv:.2f}%  n={len(v)}")
+'
+    local failed=$(( ${#values[@]} - ${#valid[@]} ))
+    if (( failed > 0 )); then
+        printf '  %d failed run(s)\n' "$failed"
+    fi
+}
+
+declare -a SHUFFLED
+
+printf '\nCold-build tournament · %d rounds\n' "$ROUNDS"
+printf 'NightBuild build execution is timed after graph generation.\n'
+printf 'Ninja and samu use their existing generated build graphs.\n\n'
+
+for ((round=1; round<=ROUNDS; round++)); do
+    printf 'Round %d/%d\n' "$round" "$ROUNDS"
+    shuffle_competitors
+
+    for competitor in "${SHUFFLED[@]}"; do
+        case "$competitor" in
+            NightBuild) run_nightbuild ;;
+            Ninja) run_ninja ;;
+            samu) run_samu ;;
+        esac
+    done
+
+    printf '\n'
 done
 
-NB_AVG="$(mean "${NIGHTBUILD_TIMES[@]}")"
-NB_MEDIAN="$(median "${NIGHTBUILD_TIMES[@]}")"
-NB_SD="$(stddev "$NB_AVG" "${NIGHTBUILD_TIMES[@]}")"
-NB_CV="$(cv "$NB_AVG" "$NB_SD")"
+printf '\nResults\n'
+printf 'NightBuild'
+print_stats "NightBuild" "${NIGHTBUILD_TIMES[@]}"
+printf 'Ninja'
+print_stats "Ninja" "${NINJA_TIMES[@]}"
+printf 'samu'
+print_stats "samu" "${SAMU_TIMES[@]}"
 
-NINJA_AVG="$(mean "${NINJA_TIMES[@]}")"
-NINJA_MEDIAN="$(median "${NINJA_TIMES[@]}")"
-NINJA_SD="$(stddev "$NINJA_AVG" "${NINJA_TIMES[@]}")"
-NINJA_CV="$(cv "$NINJA_AVG" "$NINJA_SD")"
+printf '\n'
+if (( FAILURES > 0 )); then
+    printf 'Tournament finished with %d failed run(s). No winner declared.\n' "$FAILURES"
+    exit 1
+fi
 
-SAMU_AVG="$(mean "${SAMU_TIMES[@]}")"
-SAMU_MEDIAN="$(median "${SAMU_TIMES[@]}")"
-SAMU_SD="$(stddev "$SAMU_AVG" "${SAMU_TIMES[@]}")"
-SAMU_CV="$(cv "$SAMU_AVG" "$SAMU_SD")"
+python3 - "${NIGHTBUILD_TIMES[@]}" -- "${NINJA_TIMES[@]}" -- "${SAMU_TIMES[@]}" <<'PY'
+import statistics
+import sys
 
-echo
-echo
-echo "╔════════════════════════════════════════════════════╗"
-echo "║                    RESULTS                         ║"
-echo "╚════════════════════════════════════════════════════╝"
+groups = {"NightBuild": [], "Ninja": [], "samu": []}
+current = "NightBuild"
 
-echo
+for item in sys.argv[1:]:
+    if item == "--":
+        current = {"NightBuild": "Ninja", "Ninja": "samu"}.get(current, "samu")
+    else:
+        groups[current].append(float(item))
 
-print_statistics "NightBuild" "${NIGHTBUILD_TIMES[@]}"
-echo
-print_statistics "Ninja" "${NINJA_TIMES[@]}"
-echo
-print_statistics "samu" "${SAMU_TIMES[@]}"
+means = {name: statistics.mean(times) for name, times in groups.items() if times}
+if len(means) != 3:
+    print("Not all tools have successful results; no winner declared.")
+    raise SystemExit(1)
 
-echo
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+ranked = sorted(means.items(), key=lambda item: item[1])
+print("Mean-time ranking:")
+for rank, (name, mean) in enumerate(ranked, 1):
+    print(f"  {rank}. {name}: {mean:.3f}s")
 
-WINNER="$(
-    printf '%s\n' \
-        "NightBuild $NB_AVG" \
-        "Ninja $NINJA_AVG" \
-        "samu $SAMU_AVG" |
-        sort -k2,2n |
-        head -1 |
-        cut -d' ' -f1
-)"
-
-BEST="$(
-    printf '%s\n' \
-        "$NB_AVG" \
-        "$NINJA_AVG" \
-        "$SAMU_AVG" |
-        sort -n |
-        head -1
-)"
-
-echo
-
-echo "🏆 TOURNAMENT RESULT"
-
-echo
-
-echo "   Winner: $WINNER"
-
-echo "   Average: ${BEST}s"
-
-
-echo
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo
-echo "Benchmark complete."
-echo
+gap = ranked[1][1] - ranked[0][1]
+print(f"\nFastest mean: {ranked[0][0]} ({ranked[0][1]:.3f}s)")
+print(f"Gap to second place: {gap:.3f}s")
+print("Treat small gaps cautiously; report medians and variability too.")
+PY

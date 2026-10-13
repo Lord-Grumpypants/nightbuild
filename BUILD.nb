@@ -5,6 +5,8 @@ default = [
     "test",
 ]
 
+import "third_party/xxhash/BUILD.nb"
+
 executable("nightbuild"):
     toolchain_include = [
         "toolchains/OBJCXX.json",
@@ -22,6 +24,7 @@ executable("nightbuild"):
 
     include_dirs = [
         "include",
+        "third_party/xxhash",
     ]
 
     cflags = [
@@ -36,6 +39,8 @@ executable("nightbuild"):
         "-fvirtual-function-elimination",
         "-fstrict-vtable-pointers",
         "-fprofile-instr-use=nightbuild.profdata",
+        "-fno-rtti",
+        "-fno-unwind-tables",
         "-Wno-profile-instr-unprofiled",
     ]
 
@@ -45,6 +50,7 @@ executable("nightbuild"):
         "-flto=full",
         "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
         "-Wl,--icf=safe",
+        "-Wl,-dead_strip",
     ]
 
     library_dirs = []
@@ -54,6 +60,8 @@ executable("nightbuild"):
     frameworks = [
         "CoreServices",
     ]
+
+    deps = ["xxhash"]
 
 
 executable("nightbuild-pgo"):
@@ -72,6 +80,7 @@ executable("nightbuild-pgo"):
 
     include_dirs = [
         "include",
+        "third_party/xxhash",
     ]
 
     cflags = [
@@ -103,6 +112,8 @@ executable("nightbuild-pgo"):
     frameworks = [
         "CoreServices",
     ]
+
+    deps = ["xxhash"]
 
 
 executable("test"):

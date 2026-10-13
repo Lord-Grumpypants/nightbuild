@@ -17,7 +17,7 @@ static constexpr char COMMAND_MAGIC[8] = {
     'N', 'B', 'C', 'M', 'D', 'B', '\0', '\0'
 };
 
-static constexpr std::uint32_t COMMAND_VERSION = 3;
+static constexpr std::uint32_t COMMAND_VERSION = 4;
 
 #pragma pack(push, 1)
 
@@ -47,7 +47,7 @@ struct CommandFileHeader {
 struct HashRecord {
     std::int64_t mtime_seconds;
     std::int32_t mtime_nanoseconds;
-    std::uint8_t digest[32];
+    std::uint64_t digest;
 };
 
 #pragma pack(pop)
