@@ -5356,29 +5356,22 @@ int compile_parallel_mapped(
             const auto start =
                 std::chrono::steady_clock::now();
 
-            const pid_t pid =
-                fork();
+            pid_t pid = -1;
 
-            if (pid < 0) {
+            const int spawn_error = posix_spawnp(
+                &pid,
+                argv[0],
+                nullptr,
+                nullptr,
+                argv.data(),
+                environ
+            );
 
+            if (spawn_error != 0) {
                 clear_status();
-
-                std::perror("fork");
-
+                errno = spawn_error;
+                std::perror(argv[0]);
                 return 1;
-            }
-
-            if (pid == 0) {
-                
-
-                execvp(
-                    argv[0],
-                    argv.data());
-
-                std::perror(
-                    argv[0]);
-
-                _exit(127);
             }
 
             running.push_back({
