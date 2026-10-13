@@ -5,7 +5,7 @@ default = [
     "test",
 ]
 
-import "third_party/xxhash/BUILD.nb"
+import "third_party/xxhash-BUILD.nb"
 
 executable("nightbuild"):
     toolchain_include = [
