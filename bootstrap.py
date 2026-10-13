@@ -151,6 +151,22 @@ def main():
         )
 
     run(
+        "git",
+        "submodule",
+        "update",
+        "--init",
+        "--recursive",
+        cwd=ROOT,
+    )
+
+    run(
+        "mv",
+        "third_party/xxhash-BUILD.nb",
+        "third_party/xxhash/BUILD.nb",
+        cwd=ROOT,
+    )
+    
+    run(
         "make",
         cwd=ROOT,
     )
