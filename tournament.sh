@@ -157,7 +157,7 @@ rm -rf \
 cold_start
 
 if run_timed "samu · clean build" \
-    samu -C "$SAMU_BUILD"; then
+    samu -C "$SAMU_BUILD" -j "$(sysctl -n hw.logicalcpu)"; then
 
     if [[ ! -x "$SAMU_BUILD/nightbuild" ]]; then
         echo "ERROR: samu did not produce nightbuild"
