@@ -1,4 +1,6 @@
 #include "toml.hpp"
+#include <signal.h>
+#include <poll.h>
 #include "cli.hpp"
 #include "scheduler.hpp"
 #include "fsevents.hpp"
@@ -446,45 +448,89 @@ void prepare_command_outputs(
 }
 
 int run_process(
-    const std::vector<std::string> &args) {
+    const std::vector<std::string> &args,
+    const std::string &description) {
 
     if (args.empty())
         fail("empty process command");
 
     prepare_command_outputs(args);
 
-    std::vector<char *> argv =
-        make_argv(args);
+    std::vector<char *> argv = make_argv(args);
 
-    pid_t pid = fork();
-
-    if (pid < 0)
-        fail("fork failed");
-
-    if (pid == 0) {
-        execvp(
-            argv[0],
-            argv.data());
-
-        _exit(127);
+    int pipe_fds[2];
+    if (pipe(pipe_fds) != 0) {
+        std::perror("pipe");
+        return 1;
     }
 
-    int status = 0;
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        fail("fork failed");
+    }
 
+    if (pid == 0) {
+        close(pipe_fds[0]);
+        if (dup2(pipe_fds[1], STDOUT_FILENO) < 0 ||
+            dup2(pipe_fds[1], STDERR_FILENO) < 0)
+            _exit(126);
+        close(pipe_fds[1]);
+        execvp(argv[0], argv.data());
+        _exit(errno == ENOENT ? 127 : 126);
+    }
+
+    close(pipe_fds[1]);
+
+    std::string output;
+    char buffer[16384];
+    bool read_failed = false;
+
+    for (;;) {
+        const ssize_t count = read(
+            pipe_fds[0], buffer, sizeof(buffer));
+
+        if (count > 0) {
+            output.append(buffer, static_cast<size_t>(count));
+        } else if (count == 0) {
+            break;
+        } else if (errno != EINTR) {
+            std::perror("read");
+            read_failed = true;
+            break;
+        }
+    }
+
+    close(pipe_fds[0]);
+
+    int status = 0;
     while (waitpid(pid, &status, 0) < 0) {
         if (errno == EINTR)
             continue;
-
         fail("waitpid failed");
     }
 
+    int result = 1;
     if (WIFEXITED(status))
-        return WEXITSTATUS(status);
+        result = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status))
+        result = 128 + WTERMSIG(status);
 
-    if (WIFSIGNALED(status))
-        return 128 + WTERMSIG(status);
+    if (!output.empty()) {
+        std::cout << (result == 0 && !read_failed ? "F " : "E ")
+                  << description << ":\n"
+                  << output;
+        if (output.back() != '\n')
+            std::cout << '\n';
+    } else if (result != 0 || read_failed) {
+        std::cout << "E " << description
+                  << ": command failed (exit "
+                  << (read_failed && result == 0 ? 1 : result)
+                  << ")\n";
+    }
 
-    return 1;
+    return read_failed && result == 0 ? 1 : result;
 }
 
 ProcessResult run_capture_text(
@@ -4650,7 +4696,7 @@ int build_object_target(
             << "\n";
 
         int result =
-            run_process(args);
+            run_process(args, mutable_string(database, command.description_offset));
 
         if (result != 0)
             return result;
@@ -4724,7 +4770,7 @@ int run_action_target(
             << "\n";
 
         int result =
-            run_process(args);
+            run_process(args, mutable_string(database, command.description_offset));
 
         if (result != 0)
             return result;
@@ -4868,158 +4914,220 @@ int execute_link_command(
     size_t total,
     bool verbose) {
 
-    if (index >=
-        database.header->command_count) {
-
+    if (index >= database.header->command_count)
         fail("invalid link command index");
-    }
 
-    CommandRecord &command =
-        database.commands[index];
+    CommandRecord &command = database.commands[index];
 
-    if (static_cast<CommandKind>(
-            command.kind) !=
-        CommandKind::Link) {
-
+    if (static_cast<CommandKind>(command.kind) != CommandKind::Link)
         fail("invalid link command");
-    }
 
-    auto args =
-        mutable_command_args(
-            database,
-            command);
-
+    auto args = mutable_command_args(database, command);
     prepare_command_outputs(args);
 
     const std::string description =
-        mutable_string(
-            database,
-            command.description_offset);
+        mutable_string(database, command.description_offset);
 
-    const bool live =
-        !verbose &&
-        isatty(STDOUT_FILENO);
+    const bool live = !verbose && isatty(STDOUT_FILENO);
 
-    auto show_status =
-        [&](const std::string &text) {
-
+    auto show_status = [&](const std::string &message) {
         if (!live)
             return;
 
-        std::cout
-            << "\r\033[K"
-            << "NightBuild · "
-            << text
-            << std::flush;
+        std::cout << "\r\033[KNightBuild · "
+                  << message << std::flush;
     };
 
     if (live) {
-
         show_status(
-            std::to_string(progress) +
-            "/" +
-            std::to_string(total) +
-            " · linking · " +
-            description);
-
+            std::to_string(progress) + "/" +
+            std::to_string(total) + " · linking · " + description);
     } else {
-
-        std::cout
-            << "["
-            << progress
-            << "/"
-            << total
-            << "] "
-            << description
-            << "\n";
+        std::cout << "[" << progress << "/" << total << "] "
+                  << description << "\n";
     }
 
     if (verbose) {
+        std::cout << "  ";
+        for (const auto &arg : args)
+            std::cout << arg << ' ';
+        std::cout << "\n";
+    }
 
-        std::cout
-            << "  ";
+    int pipe_fds[2];
+    if (pipe(pipe_fds) != 0) {
+        if (live)
+            std::cout << "\r\033[K" << std::flush;
+        std::perror("pipe");
+        return 1;
+    }
 
-        for (const auto &arg : args) {
-
-            std::cout
-                << arg
-                << ' ';
+    for (int fd : pipe_fds) {
+        const int flags = fcntl(fd, F_GETFD);
+        if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0) {
+            const int saved_errno = errno;
+            close(pipe_fds[0]);
+            close(pipe_fds[1]);
+            if (live)
+                std::cout << "\r\033[K" << std::flush;
+            errno = saved_errno;
+            std::perror("fcntl");
+            return 1;
         }
-
-        std::cout
-            << "\n";
     }
 
     pid_t pid = fork();
 
-    if (pid < 0)
-        fail("fork failed");
+    if (pid < 0) {
+        const int saved_errno = errno;
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        if (live)
+            std::cout << "\r\033[K" << std::flush;
+        errno = saved_errno;
+        std::perror("fork");
+        return 1;
+    }
 
     if (pid == 0) {
+        close(pipe_fds[0]);
 
-        std::vector<char *> argv =
-            make_argv(args);
+        if (dup2(pipe_fds[1], STDOUT_FILENO) < 0 ||
+            dup2(pipe_fds[1], STDERR_FILENO) < 0)
+            _exit(126);
 
-        execvp(
-            argv[0],
-            argv.data());
+        close(pipe_fds[1]);
 
-        _exit(127);
+        std::vector<char *> argv = make_argv(args);
+        execvp(argv[0], argv.data());
+        _exit(errno == ENOENT ? 127 : 126);
     }
+
+    close(pipe_fds[1]);
+
+    auto write_all = [](int fd, const char *data, size_t size) {
+        while (size > 0) {
+            const ssize_t count = write(fd, data, size);
+
+            if (count > 0) {
+                data += count;
+                size -= static_cast<size_t>(count);
+            } else if (count < 0 && errno == EINTR) {
+                continue;
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    bool output_started = false;
+    char last_output_byte = 10;
+    bool read_failed = false;
+    char buffer[16384];
+
+    for (;;) {
+        pollfd descriptor{pipe_fds[0], POLLIN | POLLHUP | POLLERR, 0};
+        int ready;
+
+        do {
+            ready = poll(&descriptor, 1, -1);
+        } while (ready < 0 && errno == EINTR);
+
+        if (ready < 0) {
+            std::perror("poll");
+            read_failed = true;
+            break;
+        }
+
+        for (;;) {
+            const ssize_t count = read(
+                pipe_fds[0], buffer, sizeof(buffer));
+
+            if (count > 0) {
+                if (!output_started) {
+                    if (live)
+                        std::cout << "\r\033[K\n" << std::flush;
+                    output_started = true;
+                }
+
+                if (!write_all(
+                        STDOUT_FILENO,
+                        buffer,
+                        static_cast<size_t>(count))) {
+                    read_failed = true;
+                    break;
+                }
+
+                last_output_byte = buffer[count - 1];
+
+                continue;
+            }
+
+            if (count == 0)
+                goto output_complete;
+
+            if (errno == EINTR)
+                continue;
+
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+
+            std::perror("read");
+            read_failed = true;
+            break;
+        }
+
+        if (read_failed)
+            break;
+
+        if (descriptor.revents & (POLLHUP | POLLERR)) {
+            // Drain remaining bytes before treating the pipe as complete.
+            continue;
+        }
+    }
+
+output_complete:
+    close(pipe_fds[0]);
+
+    if (output_started && last_output_byte != 10)
+        write_all(STDOUT_FILENO, "\n", 1);
 
     int status = 0;
+    pid_t waited;
 
-    while (waitpid(
-               pid,
-               &status,
-               0) < 0) {
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
 
-        if (errno == EINTR)
-            continue;
-
-        if (live)
-            std::cout
-                << "\r\033[K"
-                << std::flush;
-
-        fail("waitpid failed");
+    if (waited < 0) {
+        std::perror("waitpid");
+        return 1;
     }
+
+    if (read_failed)
+        return 1;
 
     int result = 1;
 
     if (WIFEXITED(status))
-        result =
-            WEXITSTATUS(status);
+        result = WEXITSTATUS(status);
     else if (WIFSIGNALED(status))
-        result =
-            128 + WTERMSIG(status);
+        result = 128 + WTERMSIG(status);
 
     if (result != 0) {
-
         if (live)
-            std::cout
-                << "\r\033[K"
-                << std::flush;
-
+            std::cout << "\r\033[K" << std::flush;
         return result;
     }
 
-    update_link_record(
-        database,
-        command,
-        objects);
+    update_link_record(database, command, objects);
 
     if (live) {
-
-        std::cout
-            << "\r\033[K"
-            << "NightBuild · "
-            << progress
-            << "/"
-            << total
-            << " · ✓ "
-            << description
-            << "\n";
+        std::cout << "\r\033[KNightBuild · "
+                  << progress << "/" << total
+                  << " · ✓ " << description << "\n";
     }
 
     return 0;
@@ -5030,168 +5138,290 @@ int compile_parallel_mapped(
     MutableCommandDatabase &database,
     const std::vector<size_t> &indices,
     size_t total_commands,
-    bool verbose)
-{
+    bool verbose) {
+
     if (indices.empty())
         return 0;
 
-    const long cpu_count =
-        sysconf(_SC_NPROCESSORS_ONLN);
-
+    const long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
     const size_t max_jobs =
-        cpu_count > 0
-            ? static_cast<size_t>(cpu_count)
-            : 1;
+        cpu_count > 0 ? static_cast<size_t>(cpu_count) : 1;
 
-    const bool live =
-        !verbose &&
-        isatty(STDOUT_FILENO);
+    const bool live = !verbose && isatty(STDOUT_FILENO);
 
     struct Running {
         pid_t pid;
         size_t index;
         std::string description;
         std::chrono::steady_clock::time_point start;
+        int output_fd;
+        std::string pending_output;
+        bool output_started = false;
+        bool exited = false;
+        bool eof = false;
+        int status = 0;
     };
 
-    auto clear_status =
-        [&]() {
+    auto write_all = [](int fd, const char *data, size_t size) -> bool {
+        while (size > 0) {
+            const ssize_t written = ::write(fd, data, size);
+            if (written > 0) {
+                data += written;
+                size -= static_cast<size_t>(written);
+                continue;
+            }
+            if (written < 0 && errno == EINTR)
+                continue;
+            return false;
+        }
+        return true;
+    };
 
-        if (!live)
+    bool status_visible = false;
+    bool diagnostics_active = false;
+    auto last_output = std::chrono::steady_clock::now();
+
+    auto clear_status = [&]() {
+        if (!live || !status_visible)
             return;
 
-        std::cout
-            << "\r\033[K"
-            << std::flush;
+        std::cout << "\r\033[K" << std::flush;
+        status_visible = false;
     };
 
-    auto show_status =
-        [&](const std::string &text) {
-
-        if (!live)
+    auto show_status = [&](const std::string &message) {
+        if (!live || diagnostics_active)
             return;
 
-        std::cout
-            << "\r\033[K"
-            << "NightBuild · "
-            << text
-            << std::flush;
+        std::cout << "\r\033[KNightBuild · "
+                  << message << std::flush;
+        status_visible = true;
     };
 
-    Scheduler scheduler(
-        paths,
-        database);
+    auto emit_output = [&](Running &entry, const char *data, size_t size) {
+        if (size == 0)
+            return;
 
-    if (live) {
-        std::cout
-            << "NightBuild · Scheduling...\n"
-            << std::flush;
-    }
+        clear_status();
 
-    /*
-     * Add every requested command before starting execution.
-     *
-     * This is important because the scheduler builds its
-     * dependency graph from the complete requested set.
-     */
+        if (!entry.output_started) {
+            const std::string header = "F " + entry.description + ":\n";
+            if (!write_all(STDOUT_FILENO, header.data(), header.size()))
+                return;
+            entry.output_started = true;
+        }
+
+        if (!write_all(STDOUT_FILENO, data, size))
+            return;
+
+        if (data[size - 1] != '\n')
+            write_all(STDOUT_FILENO, "\n", 1);
+
+        diagnostics_active = true;
+        last_output = std::chrono::steady_clock::now();
+    };
+
+    auto drain_lines = [&](Running &entry, bool flush_partial) {
+        size_t consumed = 0;
+
+        while (consumed < entry.pending_output.size()) {
+            const size_t newline =
+                entry.pending_output.find('\n', consumed);
+
+            if (newline == std::string::npos) {
+                const size_t remaining =
+                    entry.pending_output.size() - consumed;
+
+                if (flush_partial || remaining >= 65536) {
+                    emit_output(
+                        entry,
+                        entry.pending_output.data() + consumed,
+                        remaining);
+                    consumed = entry.pending_output.size();
+                }
+                break;
+            }
+
+            const size_t length = newline - consumed + 1;
+            emit_output(
+                entry,
+                entry.pending_output.data() + consumed,
+                length);
+            consumed += length;
+        }
+
+        if (consumed > 0)
+            entry.pending_output.erase(0, consumed);
+    };
+
+    Scheduler scheduler(paths, database);
+
+    if (live)
+        std::cout << "NightBuild · Scheduling...\n" << std::flush;
+
     for (size_t index : indices)
         scheduler.add(index);
 
     std::vector<Running> running;
-
-    running.reserve(
-        max_jobs);
+    running.reserve(max_jobs);
 
     size_t completed = 0;
 
-    while (!scheduler.done()) {
+    auto finish_success = [&](Running &entry) {
+        const auto finished = std::chrono::steady_clock::now();
+        const double duration =
+            std::chrono::duration<double>(finished - entry.start).count();
 
-        /*
-         * Fill every available CPU slot.
-         */
-        while (!scheduler.empty() &&
-               running.size() < max_jobs) {
+        const size_t command_index = entry.index;
+        CommandRecord &command = database.commands[command_index];
 
-            const size_t index =
-                scheduler.next();
+        scheduler.record(command_index, duration);
 
-            if (index ==
-                std::numeric_limits<size_t>::max()) {
+        const std::string source = mutable_string(
+            database, command.source_path_offset);
+        const std::string dependency = mutable_string(
+            database, command.dependency_path_offset);
 
+        if (!source.empty()) {
+            update_hash(
+                database,
+                command.source_hash_index,
+                cached_xxh3_file(
+                    database, command.source_hash_index, source));
+        }
+
+        if (!dependency.empty()) {
+            update_hash(
+                database,
+                command.dependency_hash_index,
+                dependency_hash(paths, source, dependency));
+        }
+
+        update_hash(
+            database,
+            command.state_hash_index,
+            hash_for_arguments(mutable_command_args(database, command)));
+
+        scheduler.complete(command_index);
+    };
+
+    while (!scheduler.done() || !running.empty()) {
+        while (!scheduler.empty() && running.size() < max_jobs) {
+            const size_t index = scheduler.next();
+
+            if (index == std::numeric_limits<size_t>::max())
                 break;
-            }
 
-            CommandRecord &command =
-                database.commands[index];
+            CommandRecord &command = database.commands[index];
+            auto args = mutable_command_args(database, command);
+            prepare_command_outputs(args);
 
-            auto args =
-                mutable_command_args(
-                    database,
-                    command);
-
-            prepare_command_outputs(
-                args);
-
-            const std::string description =
-                mutable_string(
-                    database,
-                    command.description_offset);
+            const std::string description = mutable_string(
+                database, command.description_offset);
 
             if (verbose) {
-
-                std::cout
-                    << "["
-                    << (completed +
-                        running.size() +
-                        1)
-                    << "/"
-                    << total_commands
-                    << "] "
-                    << description
-                    << "\n";
-
-                std::cout
-                    << "  ";
+                std::cout << "[" << (completed + running.size() + 1)
+                          << "/" << total_commands << "] "
+                          << description << "\n  ";
 
                 for (const auto &arg : args)
-                    std::cout
-                        << arg
-                        << ' ';
+                    std::cout << arg << ' ';
 
-                std::cout
-                    << "\n";
-
-            } else if (live) {
-
+                std::cout << "\n";
+            } else {
                 show_status(
-                    std::to_string(completed) +
-                    "/" +
+                    std::to_string(completed) + "/" +
                     std::to_string(total_commands) +
-                    " · compiling · " +
-                    description);
+                    " · compiling · " + description);
             }
 
-            std::vector<char *> argv =
-                make_argv(args);
+            int pipe_fds[2];
+            if (pipe(pipe_fds) != 0) {
+                clear_status();
+                std::perror("pipe");
+                return 1;
+            }
 
-            const auto start =
-                std::chrono::steady_clock::now();
+            bool pipe_ok = true;
 
-            pid_t pid = -1;
+            for (int fd : pipe_fds) {
+                const int flags = fcntl(fd, F_GETFD);
+                if (flags < 0 ||
+                    fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0) {
+                    pipe_ok = false;
+                    break;
+                }
+            }
 
-            const int spawn_error = posix_spawnp(
-                &pid,
-                argv[0],
-                nullptr,
-                nullptr,
-                argv.data(),
-                environ
-            );
+            if (!pipe_ok) {
+                const int saved_errno = errno;
+                close(pipe_fds[0]);
+                close(pipe_fds[1]);
+                clear_status();
+                errno = saved_errno;
+                std::perror("fcntl");
+                return 1;
+            }
+
+            posix_spawn_file_actions_t actions;
+            int spawn_error = posix_spawn_file_actions_init(&actions);
+
+            if (spawn_error == 0)
+                spawn_error = posix_spawn_file_actions_adddup2(
+                    &actions, pipe_fds[1], STDOUT_FILENO);
+
+            if (spawn_error == 0)
+                spawn_error = posix_spawn_file_actions_adddup2(
+                    &actions, pipe_fds[1], STDERR_FILENO);
+
+            if (spawn_error == 0)
+                spawn_error = posix_spawn_file_actions_addclose(
+                    &actions, pipe_fds[0]);
+
+            if (spawn_error == 0)
+                spawn_error = posix_spawn_file_actions_addclose(
+                    &actions, pipe_fds[1]);
 
             if (spawn_error != 0) {
+                posix_spawn_file_actions_destroy(&actions);
+                close(pipe_fds[0]);
+                close(pipe_fds[1]);
+                clear_status();
+                errno = spawn_error;
+                std::perror("posix_spawn_file_actions");
+                return 1;
+            }
+
+            std::vector<char *> argv = make_argv(args);
+            pid_t pid = -1;
+
+            const auto start_time = std::chrono::steady_clock::now();
+
+            spawn_error = posix_spawnp(
+                &pid, argv[0], &actions, nullptr, argv.data(), environ);
+
+            posix_spawn_file_actions_destroy(&actions);
+            close(pipe_fds[1]);
+
+            if (spawn_error != 0) {
+                close(pipe_fds[0]);
                 clear_status();
                 errno = spawn_error;
                 std::perror(argv[0]);
+                return 1;
+            }
+
+            const int flags = fcntl(pipe_fds[0], F_GETFL);
+
+            if (flags < 0 ||
+                fcntl(pipe_fds[0], F_SETFL, flags | O_NONBLOCK) < 0) {
+                const int saved_errno = errno;
+                close(pipe_fds[0]);
+                kill(pid, SIGTERM);
+                waitpid(pid, nullptr, 0);
+                clear_status();
+                errno = saved_errno;
+                std::perror("fcntl");
                 return 1;
             }
 
@@ -5199,183 +5429,172 @@ int compile_parallel_mapped(
                 pid,
                 index,
                 description,
-                start
+                start_time,
+                pipe_fds[0]
             });
         }
 
-        /*
-         * If there is nothing running but work remains, the
-         * dependency graph is stuck.
-         */
         if (running.empty()) {
+            if (scheduler.done())
+                break;
 
             clear_status();
-
-            std::cerr
-                << "nightbuild: scheduler deadlock\n";
-
+            std::cerr << "nightbuild: scheduler deadlock\n";
             return 1;
         }
 
-        int status = 0;
+        std::vector<pollfd> poll_fds;
+        std::vector<size_t> poll_indices;
 
-        pid_t pid;
+        for (size_t i = 0; i < running.size(); ++i) {
+            if (running[i].eof)
+                continue;
 
-        do {
+            poll_fds.push_back({
+                running[i].output_fd,
+                static_cast<short>(POLLIN | POLLHUP | POLLERR),
+                0
+            });
+            poll_indices.push_back(i);
+        }
 
-            pid =
-                waitpid(
-                    -1,
-                    &status,
-                    0);
+        const int poll_result = poll(
+            poll_fds.data(),
+            static_cast<nfds_t>(poll_fds.size()),
+            50);
 
-        } while (
-            pid < 0 &&
-            errno == EINTR);
-
-        if (pid < 0) {
-
+        if (poll_result < 0 && errno != EINTR) {
             clear_status();
-
-            std::perror("waitpid");
-
+            std::perror("poll");
             return 1;
         }
 
-        const auto it =
-            std::find_if(
-                running.begin(),
-                running.end(),
-                [pid](const Running &entry) {
+        if (poll_result > 0) {
+            for (size_t p = 0; p < poll_fds.size(); ++p) {
+                if (poll_fds[p].revents == 0)
+                    continue;
 
-                    return entry.pid == pid;
-                });
+                Running &entry = running[poll_indices[p]];
+                char buffer[16384];
 
-        if (it == running.end()) {
+                for (;;) {
+                    const ssize_t count = read(
+                        entry.output_fd, buffer, sizeof(buffer));
 
-            clear_status();
+                    if (count > 0) {
+                        entry.pending_output.append(
+                            buffer, static_cast<size_t>(count));
+                        drain_lines(entry, false);
+                        continue;
+                    }
 
-            std::cerr
-                << "nightbuild: waitpid returned "
-                   "unknown child\n";
+                    if (count == 0) {
+                        entry.eof = true;
+                        close(entry.output_fd);
+                        entry.output_fd = -1;
+                        drain_lines(entry, true);
+                    } else if (errno == EINTR) {
+                        continue;
+                    } else if (errno != EAGAIN &&
+                               errno != EWOULDBLOCK) {
+                        entry.eof = true;
+                        close(entry.output_fd);
+                        entry.output_fd = -1;
+                        drain_lines(entry, true);
+                    }
 
-            return 1;
+                    break;
+                }
+            }
         }
 
-        const auto finished =
-            std::chrono::steady_clock::now();
+        for (auto &entry : running) {
+            if (entry.exited)
+                continue;
 
-        const double duration =
-            std::chrono::duration<double>(
-                finished - it->start)
-                .count();
+            int status = 0;
+            const pid_t result = waitpid(entry.pid, &status, WNOHANG);
 
-        const size_t command_index =
-            it->index;
-
-        CommandRecord &command =
-            database.commands[
-                command_index];
-
-        const std::string description =
-            it->description;
-
-        /*
-         * Do not mark the command complete until we know the
-         * process actually succeeded.
-         */
-        if (!WIFEXITED(status) ||
-            WEXITSTATUS(status) != 0) {
-
-            clear_status();
-
-            if (WIFEXITED(status))
-                return WEXITSTATUS(status);
-
-            if (WIFSIGNALED(status))
-                return 128 + WTERMSIG(status);
-
-            return 1;
+            if (result == entry.pid) {
+                entry.exited = true;
+                entry.status = status;
+            } else if (result < 0 && errno != EINTR) {
+                clear_status();
+                std::perror("waitpid");
+                return 1;
+            }
         }
 
-        /*
-         * Successful command:
-         *
-         *   1. Record timing telemetry.
-         *   2. Refresh command hashes.
-         *   3. Mark the scheduler node complete.
-         *   4. This unlocks dependent commands.
-         */
-        scheduler.record(
-            command_index,
-            duration);
+        for (size_t i = 0; i < running.size();) {
+            Running &entry = running[i];
 
-        const std::string source =
-            mutable_string(
-                database,
-                command.source_path_offset);
+            if (!entry.exited || !entry.eof) {
+                ++i;
+                continue;
+            }
 
-        const std::string dependency =
-            mutable_string(
-                database,
-                command.dependency_path_offset);
+            drain_lines(entry, true);
 
-        if (!source.empty()) {
+            if (!WIFEXITED(entry.status) ||
+                WEXITSTATUS(entry.status) != 0) {
+                int failure_code = 1;
+                if (WIFEXITED(entry.status))
+                    failure_code = WEXITSTATUS(entry.status);
+                else if (WIFSIGNALED(entry.status))
+                    failure_code = 128 + WTERMSIG(entry.status);
 
-            update_hash(
-                database,
-                command.source_hash_index,
-                cached_xxh3_file(
-                    database,
-                    command.source_hash_index,
-                    source));
-        }
+                for (auto &child : running) {
+                    if (!child.exited)
+                        kill(child.pid, SIGTERM);
+                }
 
-        if (!dependency.empty()) {
+                for (auto &child : running) {
+                    if (!child.exited) {
+                        pid_t waited;
+                        do {
+                            waited = waitpid(child.pid, nullptr, 0);
+                        } while (waited < 0 && errno == EINTR);
+                    }
+                    if (child.output_fd >= 0) {
+                        close(child.output_fd);
+                        child.output_fd = -1;
+                    }
+                }
 
-            update_hash(
-                database,
-                command.dependency_hash_index,
-                dependency_hash(
-                    paths,
-                    source,
-                    dependency));
-        }
+                clear_status();
+                return failure_code;
+            }
 
-        update_hash(
-            database,
-            command.state_hash_index,
-            hash_for_arguments(
-                mutable_command_args(
-                    database,
-                    command)));
-
-        scheduler.complete(
-            command_index);
-
-        running.erase(it);
-
-        ++completed;
-
-        if (live) {
+            const std::string description = entry.description;
+            finish_success(entry);
+            running.erase(running.begin() + static_cast<ptrdiff_t>(i));
+            ++completed;
 
             show_status(
-                std::to_string(completed) +
-                "/" +
+                std::to_string(completed) + "/" +
                 std::to_string(total_commands) +
-                " · compiling · ✓ " +
-                description);
+                " · compiling · ✓ " + description);
+        }
+
+        if (diagnostics_active &&
+            std::chrono::steady_clock::now() - last_output >=
+                std::chrono::milliseconds(150)) {
+            diagnostics_active = false;
+            show_status(
+                std::to_string(completed) + "/" +
+                std::to_string(total_commands) + " · compiling");
         }
     }
 
-    if (live)
-        std::cout
-            << "\n";
+    clear_status();
 
-    msync(
-        database.mapping,
-        database.size,
-        MS_SYNC);
+    if (live)
+        std::cout << "\n";
+
+    if (msync(database.mapping, database.size, MS_SYNC) != 0) {
+        std::perror("msync");
+        return 1;
+    }
 
     return 0;
 }
@@ -5385,6 +5604,22 @@ int build(
     const std::vector<std::string> &targets,
     bool verbose)
 {
+    struct BuildTimer {
+        std::chrono::steady_clock::time_point start =
+            std::chrono::steady_clock::now();
+
+        ~BuildTimer() {
+            const double seconds =
+                std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - start
+                ).count();
+
+            std::cout << "NightBuild · Build ended "
+                      << std::fixed << std::setprecision(2)
+                      << seconds << "s\n";
+        }
+    } build_timer;
+
     // int meow = 10;
     // std::cout << meow << std::endl;
     BuildPaths paths =
