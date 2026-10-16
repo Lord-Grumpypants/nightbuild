@@ -5049,6 +5049,8 @@ int execute_link_command(
                 if (!output_started) {
                     if (live)
                         std::cout << "\r\033[K\n" << std::flush;
+                    std::cout << "F " << description << ":\n"
+                              << std::flush;
                     output_started = true;
                 }
 
@@ -5937,15 +5939,7 @@ int build(
             continue;
         }
 
-        if (link_needed(
-                paths,
-                reinterpret_cast<
-                    const CommandDatabase &>(
-                    writable),
-                command,
-                objects)) {
-            ++link_count;
-        }
+        ++link_count;
     }
 
     size_t total_work =
@@ -5984,8 +5978,8 @@ int build(
             CommandRecord &command =
                 writable.commands[i];
 
-            if (!selected(database, command))
-            if (!required_commands.contains(static_cast<size_t>(i)))
+            if (!selected(database, command) ||
+                !required_commands.contains(static_cast<size_t>(i)))
                 continue;
             if (static_cast<CommandKind>(
                     command.kind) !=
@@ -6006,8 +6000,10 @@ int build(
 
             check.close();
 
-            if (!needed)
+            if (!needed) {
+                ++link_progress;
                 continue;
+            }
 
             bool is_app =
                 command_output(
@@ -6130,8 +6126,8 @@ int build(
         const CommandRecord &command =
             current.commands[i];
 
-        if (!selected(current, command))
-        if (!required_commands.contains(static_cast<size_t>(i)))
+        if (!selected(current, command) ||
+            !required_commands.contains(static_cast<size_t>(i)))
             continue;
 
         if (static_cast<CommandKind>(
@@ -6146,7 +6142,7 @@ int build(
                 current,
                 command,
                 objects)) {
-
+            ++link_progress;
             continue;
         }
 
@@ -6311,13 +6307,12 @@ void clobber(
     }
 }
 
-void rebuild(
+int rebuild(
     const fs::path &build_dir,
     const std::vector<std::string> &targets)
 {
     clean(build_dir);
-
-    build(
+    return build(
         build_dir,
         targets,
         false);
@@ -6489,29 +6484,28 @@ int main(
         return 0;
     }
 
-    case Command::Build:
-
-        // if (cli.tui)
-
-        //     return build_tui(
-        //         fs::absolute(
-        //             cli.directory),
-        //         build);
-
-        return build(
-            fs::absolute(
-                cli.directory),
+    case Command::Build: {
+        const int result = build(
+            fs::absolute(cli.directory),
             cli.targets,
             cli.verbose);
 
-    case Command::Rebuild:
+        if (result != 0)
+            std::cout << "Build failed\\n" << std::flush;
 
-        rebuild(
-            fs::absolute(
-                cli.directory),
+        return result;
+    }
+
+    case Command::Rebuild: {
+        const int result = rebuild(
+            fs::absolute(cli.directory),
             cli.targets);
 
-        return 0;
+        if (result != 0)
+            std::cout << "Build failed\\n" << std::flush;
+
+        return result;
+    }
 
     case Command::Clean:
 
