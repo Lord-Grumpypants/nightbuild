@@ -1060,32 +1060,30 @@ struct Parser {
             return;
         }
 
-        if (name == "flags") {
+        if (name == "flags" ||
+            name.rfind("flags.", 0) == 0) {
             error(
                 line,
-                "generic flags use flags.<name>");
+                "use bare compiler flag names, "
+                "not the flags. prefix");
         }
 
-        if (name.rfind("flags.", 0) == 0) {
-            const std::string flag_name =
-                name.substr(6);
+        if (name.size() > 5 &&
+            name.ends_with("flags") &&
+            name != "cflags" &&
+            name != "cxxflags" &&
+            name != "ldflags") {
 
-            if (!is_identifier(flag_name)) {
+            if (!is_identifier(name)) {
                 error(
                     line,
-                    "invalid generic flag name");
+                    "invalid compiler flag name");
             }
 
             auto& destination =
-                target.flags[flag_name];
+                target.flags[name];
 
             assign_strings(destination);
-
-            if (flag_name == "cxxflags") {
-                target.cxxflags =
-                    destination;
-            }
-
             return;
         }
 
