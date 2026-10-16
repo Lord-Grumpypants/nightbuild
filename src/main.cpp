@@ -5181,6 +5181,7 @@ int compile_parallel_mapped(
 
     bool status_visible = false;
     bool diagnostics_active = false;
+    std::string last_job_description;
     auto last_output = std::chrono::steady_clock::now();
 
     auto clear_status = [&]() {
@@ -5568,6 +5569,7 @@ int compile_parallel_mapped(
             }
 
             const std::string description = entry.description;
+            last_job_description = description;
             finish_success(entry);
             running.erase(running.begin() + static_cast<ptrdiff_t>(i));
             ++completed;
@@ -5584,7 +5586,10 @@ int compile_parallel_mapped(
             diagnostics_active = false;
             show_status(
                 std::to_string(completed) + "/" +
-                std::to_string(total_commands) + " · compiling");
+                std::to_string(total_commands) + " · compiling" +
+                (last_job_description.empty()
+                    ? std::string()
+                    : " · " + last_job_description));
         }
     }
 
