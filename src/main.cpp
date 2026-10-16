@@ -1443,7 +1443,7 @@ std::vector<Toolchain> load_toolchains(
         };
 
         toolchain.description =
-            "C";
+            "CC";
 
         toolchain.output_extension =
             ".o";
