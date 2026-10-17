@@ -21,12 +21,15 @@ executable("nightbuild"):
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
+        "src/ui/license_window.mm",
     ]
 
     include_dirs = [
         "include",
         "third_party/xxhash",
     ]
+
+    objcxxflags = ["-std=c++23", "-O3"]
 
     cxxflags = [
         "-std=c++23",
@@ -60,6 +63,7 @@ executable("nightbuild"):
 
     frameworks = [
         "CoreServices",
+        "AppKit",
     ]
 
     deps = ["xxhash"]
@@ -79,12 +83,15 @@ executable("nightbuild-pgo"):
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
+        "src/ui/license_window.mm",
     ]
 
     include_dirs = [
         "include",
         "third_party/xxhash",
     ]
+
+    objcxxflags = ["-std=c++23", "-O3"]
 
     cxxflags = [
         "-std=c++23",
@@ -114,6 +121,7 @@ executable("nightbuild-pgo"):
 
     frameworks = [
         "CoreServices",
+        "AppKit",
     ]
 
     deps = ["xxhash"]
@@ -132,12 +140,15 @@ executable("nightbuild-release"):
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
+        "src/ui/license_window.mm",
     ]
 
     include_dirs = [
         "include",
         "third_party/xxhash",
     ]
+
+    objcxxflags = ["-std=c++23", "-O3"]
 
     cxxflags = [
         "-std=c++23",
@@ -153,6 +164,7 @@ executable("nightbuild-release"):
     pkg_config = []
 
     ldflags = [
+        "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
         "-flto=full",
         "-Wl,-dead_strip",
     ]
@@ -163,6 +175,7 @@ executable("nightbuild-release"):
 
     frameworks = [
         "CoreServices",
+        "AppKit",
     ]
 
     deps = ["xxhash"]
