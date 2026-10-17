@@ -286,7 +286,7 @@ bool write_compile_commands(
                 strings,
                 command.target_name_offset);
 
-        if (!selected_targets.contains(target_name))
+        if (selected_targets.find(target_name) == selected_targets.end())
             continue;
 
         if (!first)

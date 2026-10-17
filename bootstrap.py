@@ -108,9 +108,9 @@ def make_environment():
         + env.get("PATH", "")
     )
 
-    # env["CC"] = str(LLVM_BIN / "clang")
-    # env["CXX"] = str(LLVM_BIN / "clang++")
-    # env["AR"] = str(LLVM_BIN / "llvm-ar")
+    env["CC"] = str(LLVM_BIN / "clang")
+    env["CXX"] = str(LLVM_BIN / "clang++")
+    env["AR"] = str(LLVM_BIN / "llvm-ar")
 
     return env
 
