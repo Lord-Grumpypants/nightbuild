@@ -118,6 +118,54 @@ executable("nightbuild-pgo"):
 
     deps = ["xxhash"]
 
+executable("nightbuild-release"):
+    toolchain_include = [
+        "toolchains/OBJCXX.json",
+        "toolchains/CXX.json",
+        "toolchains/C.json",
+    ]
+
+    sources = [
+        "src/main.cpp",
+        "src/cli.cpp",
+        "src/toml.cpp",
+        "src/scheduler.cpp",
+        "src/fsevents.cpp",
+        "src/compile_commands.cpp",
+    ]
+
+    include_dirs = [
+        "include",
+        "third_party/xxhash",
+    ]
+
+    cxxflags = [
+        "-std=c++23",
+        "-O3",
+        "-flto=full",
+        "-fstrict-aliasing",
+        "-fomit-frame-pointer",
+        "-fno-rtti",
+        "-fno-unwind-tables",
+        "-Wno-profile-instr-unprofiled",
+    ]
+
+    pkg_config = []
+
+    ldflags = [
+        "-flto=full",
+        "-Wl,-dead_strip",
+    ]
+
+    library_dirs = []
+
+    libraries = []
+
+    frameworks = [
+        "CoreServices",
+    ]
+
+    deps = ["xxhash"]
 
 executable("test"):
     toolchain_include = [
