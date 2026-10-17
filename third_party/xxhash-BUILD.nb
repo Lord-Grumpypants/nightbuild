@@ -1,6 +1,6 @@
 static_library("xxhash"):
     sources = ["third_party/xxhash/xxhash.c"]
-    flags.cflags = [
+    cflags = [
         "-std=c11",
         "-O3",
         "-march=native",
