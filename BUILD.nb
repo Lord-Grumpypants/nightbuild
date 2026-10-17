@@ -8,9 +8,10 @@ default = [
 import "third_party/xxhash/BUILD.nb"
 
 executable("nightbuild"):
-    toolchain_include = [
+   toolchain_include = [
         "toolchains/OBJCXX.json",
         "toolchains/CXX.json",
+        "toolchains/C.json",
     ]
 
     sources = [
@@ -66,7 +67,9 @@ executable("nightbuild"):
 
 executable("nightbuild-pgo"):
     toolchain_include = [
+        "toolchains/OBJCXX.json",
         "toolchains/CXX.json",
+        "toolchains/C.json",
     ]
 
     sources = [

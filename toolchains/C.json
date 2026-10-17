@@ -1,0 +1,12 @@
+{
+  "name": "Homebrew LLVM C",
+  "extension": ".c",
+  "compiler": "/opt/homebrew/opt/llvm/bin/clang",
+  "flags_key": "cflags",
+  "dependency_flags": [
+    "-MMD",
+    "-MP"
+  ],
+  "description": "CC",
+  "output_extension": ".o"
+}
