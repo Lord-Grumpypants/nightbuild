@@ -5983,8 +5983,7 @@ int build(
             CommandRecord &command =
                 writable.commands[i];
 
-            if (!selected(database, command) ||
-                !required_commands.contains(static_cast<size_t>(i)))
+            if (!required_commands.contains(static_cast<size_t>(i)))
                 continue;
             if (static_cast<CommandKind>(
                     command.kind) !=
@@ -6131,8 +6130,7 @@ int build(
         const CommandRecord &command =
             current.commands[i];
 
-        if (!selected(current, command) ||
-            !required_commands.contains(static_cast<size_t>(i)))
+        if (!required_commands.contains(static_cast<size_t>(i)))
             continue;
 
         if (static_cast<CommandKind>(
