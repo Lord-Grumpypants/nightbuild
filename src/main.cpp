@@ -6366,6 +6366,8 @@ void print_help()
         << "                    Show this help message\n"
         << "  " << cyan << "--version" << reset
         << "                 Show version information\n"
+        << "  " << cyan << "--no-license, -no-license" << reset
+        << "    Bypass the interactive license gate\n"
         << "\n"
 
         << bold << yellow << "Build arguments" << reset << "\n"
@@ -6444,6 +6446,20 @@ int main(
     int argc,
     char **argv)
 {
+    bool no_license = false;
+    int write_arg = 1;
+    for (int read_arg = 1; read_arg < argc; ++read_arg) {
+        const std::string_view argument(argv[read_arg]);
+        if (argument == "--no-license" ||
+            argument == "-no-license") {
+            no_license = true;
+        } else {
+            argv[write_arg++] = argv[read_arg];
+        }
+    }
+    argc = write_arg;
+    argv[argc] = nullptr;
+
     if (argc > 1) {
         const std::string_view command(argv[1]);
 
@@ -6468,7 +6484,7 @@ int main(
             command == "build" || command == "rebuild" ||
             command == "clean" || command == "clobber";
 
-        if (gated && !nightbuild_license_is_accepted()) {
+        if (gated && !no_license && !nightbuild_license_is_accepted()) {
             std::cerr
                 << "It appears you haven’t accepted the license. "
                 << "Run nightbuild accept-license to accept.\n";

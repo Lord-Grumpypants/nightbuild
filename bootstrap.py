@@ -183,6 +183,7 @@ def main():
         "gen",
         "-C",
         str(PGO_BUILD_DIR),
+        "--no-license",
         cwd=ROOT,
         env=env,
     )
@@ -193,6 +194,7 @@ def main():
         "-C",
         str(PGO_BUILD_DIR),
         "nightbuild-pgo",
+        "--no-license",
         cwd=ROOT,
         env=env,
     )
