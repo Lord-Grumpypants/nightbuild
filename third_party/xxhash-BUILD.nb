@@ -1,4 +1,9 @@
 static_library("xxhash"):
+    toolchain_include = [
+        "toolchains/OBJCXX.json",
+        "toolchains/CXX.json",
+        "toolchains/C.json",
+    ]
     sources = ["third_party/xxhash/xxhash.c"]
     cflags = [
         "-std=c11",
