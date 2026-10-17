@@ -2,6 +2,7 @@
 #include <signal.h>
 #include <poll.h>
 #include "cli.hpp"
+#include <string_view>
 #include "scheduler.hpp"
 #include "fsevents.hpp"
 #include "command.hpp"
@@ -6435,10 +6436,47 @@ void print_version()
 
 } // namespace
 
+
+extern "C" int nightbuild_license_is_accepted(void);
+extern "C" int nightbuild_show_license_window(void);
+
 int main(
     int argc,
     char **argv)
 {
+    if (argc > 1) {
+        const std::string_view command(argv[1]);
+
+        if (command == "accept-license") {
+            if (argc != 2) {
+                std::cerr << "Usage: nightbuild accept-license\n";
+                return 1;
+            }
+
+            if (nightbuild_show_license_window()) {
+                std::cout
+                    << "License successfully accepted. Welcome to NightBuild.\n";
+                return 0;
+            }
+
+            std::cerr << "License acceptance cancelled.\n";
+            return 1;
+        }
+
+        const bool gated =
+            command == "gen" || command == "args" ||
+            command == "build" || command == "rebuild" ||
+            command == "clean" || command == "clobber";
+
+        if (gated && !nightbuild_license_is_accepted()) {
+            std::cerr
+                << "It appears you haven’t accepted the license. "
+                << "Run nightbuild accept-license to accept.\n";
+            return 1;
+        }
+    }
+
+
     try {
     CLIResult cli =
         parse_cli(
