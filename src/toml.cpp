@@ -964,14 +964,14 @@ struct Parser {
             return;
         }
 
-        if (name == "cflags" ||
-            name == "cxxflags") {
+        if (name == "cflags") {
+            assign_strings(target.flags["cflags"]);
+            return;
+        }
 
+        if (name == "cxxflags") {
             assign_strings(target.cxxflags);
-
-            target.flags["cxxflags"] =
-                target.cxxflags;
-
+            target.flags["cxxflags"] = target.cxxflags;
             return;
         }
 
