@@ -29,7 +29,7 @@ executable("nightbuild"):
         "third_party/xxhash",
     ]
 
-    objcxxflags = ["-std=c++23", "-O3"]
+    objcxxflags = ["-std=c++23", "-O3", "-fno-objc-msgsend-class-selector-stubs"]
 
     cxxflags = [
         "-std=c++23",
@@ -91,7 +91,7 @@ executable("nightbuild-pgo"):
         "third_party/xxhash",
     ]
 
-    objcxxflags = ["-std=c++23", "-O3"]
+    objcxxflags = ["-std=c++23", "-O3", "-fno-objc-msgsend-class-selector-stubs"]
 
     cxxflags = [
         "-std=c++23",
@@ -148,7 +148,7 @@ executable("nightbuild-release"):
         "third_party/xxhash",
     ]
 
-    objcxxflags = ["-std=c++23", "-O3"]
+    objcxxflags = ["-std=c++23", "-O3", "-fno-objc-msgsend-class-selector-stubs"]
 
     cxxflags = [
         "-std=c++23",
