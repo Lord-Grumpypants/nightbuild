@@ -1,4 +1,0 @@
-image: macos-sonoma
-
-build_script:
-  - python3 bootstrap.py
