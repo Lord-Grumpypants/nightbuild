@@ -25,6 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    outputs:
+      release_tag: ${{ steps.release.outputs.tag }}
+      release_sha: ${{ steps.release.outputs.sha }}
+
     steps:
       - name: Check out NightBuild
         uses: actions/checkout@v5
@@ -71,29 +75,21 @@ jobs:
               --workflow ci.yml \
               --commit "$RELEASE_SHA" \
               --limit 100 \
-              --json databaseId,headSha,status,conclusion \
-              --jq "[.[] | select(.headSha == \"$RELEASE_SHA\") ]")"
+              --json headSha,status,conclusion)"
 
             if echo "$RUNS" | jq -e \
-              '[.[] | select(.status == "completed" and .conclusion == "success")] | length > 0' \
+              --arg sha "$RELEASE_SHA" \
+              '[.[] | select(.headSha == $sha and .status == "completed" and .conclusion == "success")] | length > 0' \
               >/dev/null; then
               echo "Successful CI run found for $RELEASE_SHA"
               exit 0
             fi
 
-            if echo "$RUNS" | jq -e \
-              'length > 0 and all(.[]; .status == "completed") and all(.[]; .conclusion != "success")' \
-              >/dev/null; then
-              echo "CI completed without a successful run for $RELEASE_SHA"
-              echo "$RUNS" | jq .
-              exit 1
-            fi
-
-            echo "Waiting for CI for $RELEASE_SHA ($attempt/60)..."
+            echo "Waiting for successful CI ($attempt/60)..."
             sleep 10
           done
 
-          echo "Timed out waiting for successful CI for $RELEASE_SHA"
+          echo "No successful CI run found for $RELEASE_SHA"
           exit 1
 
   release:
@@ -108,35 +104,39 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.verify.outputs.release_tag }}
 
       - name: Confirm release commit
         env:
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+          RELEASE_SHA: ${{ needs.verify.outputs.release_sha }}
         run: |
           set -euo pipefail
 
-          TAG_SHA="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
           CHECKOUT_SHA="$(git rev-parse HEAD)"
 
-          if [ "$TAG_SHA" != "$CHECKOUT_SHA" ]; then
-            echo "Checked-out commit does not match the release tag."
-            echo "Tag:      $TAG_SHA"
-            echo "Checkout: $CHECKOUT_SHA"
+          if [ "$CHECKOUT_SHA" != "$RELEASE_SHA" ]; then
+            echo "Checked-out commit does not match the verified release commit."
+            echo "Expected: $RELEASE_SHA"
+            echo "Actual:   $CHECKOUT_SHA"
             exit 1
           fi
 
       - name: Build optimized release
-        run: python3 bootstrap.py
+        run: |
+          set -euo pipefail
+          python3 bootstrap.py
+          ./nightbuild gen --no-license -C out/Official
+          ./nightbuild build --no-license -C out/Official nightbuild-release
 
       - name: Prepare release package
         env:
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
         run: |
           set -euo pipefail
 
-          if [ ! -f nightbuild ]; then
-            echo "Expected executable not found: nightbuild"
+          if [ ! -f nightbuild-release ]; then
+            echo "Expected executable not found: nightbuild-release"
             echo "Repository root:"
             ls -la
 
@@ -149,7 +149,7 @@ jobs:
           fi
 
           mkdir -p release
-          cp nightbuild release/nightbuild
+          cp nightbuild-release release/nightbuild
           chmod +x release/nightbuild
 
           file release/nightbuild
@@ -166,7 +166,7 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
         run: |
           set -euo pipefail
 
