@@ -177,6 +177,7 @@ executable("ninja"):
             "gen",
             "-C",
             "build",
+            "--no-license",
             cwd=ninja_src,
             env=env,
         )
@@ -186,6 +187,7 @@ executable("ninja"):
             "build",
             "-C",
             "build",
+            "--no-license",
             cwd=ninja_src,
             env=env,
         )
