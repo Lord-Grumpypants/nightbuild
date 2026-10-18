@@ -28,6 +28,7 @@ include_test/hello
 
 nightbuild
 nightbuild-pgo
+nightbuild-release
 test
 
 .DS_Store
