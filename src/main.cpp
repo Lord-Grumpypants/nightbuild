@@ -6432,7 +6432,7 @@ void print_help()
 void print_version()
 {
     std::cout
-        << "NightBuild 0.2\n"
+        << "NightBuild 0.3.0\n"
         << "Native C++ build system\n";
 }
 
