@@ -222,6 +222,7 @@ def main():
         "gen",
         "-C",
         str(OFFICIAL_BUILD_DIR),
+        "--no-license",
         cwd=ROOT,
         env=env,
     )
@@ -232,6 +233,7 @@ def main():
         "-C",
         str(OFFICIAL_BUILD_DIR),
         "nightbuild",
+        "--no-license",
         cwd=ROOT,
         env=env,
     )
