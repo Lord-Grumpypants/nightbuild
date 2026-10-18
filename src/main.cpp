@@ -313,6 +313,7 @@ struct BuildRecord {
     std::string description;
     std::string source;
     std::string output;
+    std::vector<std::string> outputs;
     std::string dependency;
     std::string source_hash;
     std::string dependency_hash;
@@ -2770,10 +2771,23 @@ void append_command_database(
                 strings,
                 record.source);
 
-        command.output_path_offset =
-            add_string(
-                strings,
-                record.output);
+        {
+            std::vector<std::string> outputs = record.outputs;
+            if (outputs.empty() && !record.output.empty())
+                outputs.push_back(record.output);
+
+            const std::string primary_output =
+                !record.output.empty() ? record.output :
+                (!outputs.empty() ? outputs.front() : std::string{});
+
+            command.output_path_offset =
+                add_string(strings, primary_output);
+            command.outputs_offset = arguments.size();
+            command.outputs_count = outputs.size();
+
+            for (const auto &output : outputs)
+                arguments.push_back(add_string(strings, output));
+        }
 
         command.dependency_path_offset =
             add_string(
@@ -3967,6 +3981,7 @@ std::vector<BuildRecord> make_build_records(
             target.name;
         record.output =
             target.output;
+        record.outputs = target.outputs;
         record.state_hash =
             hash_for_arguments(
                 record.argv);
@@ -4748,13 +4763,24 @@ int run_action_target(
         std::string current_hash =
             hash_for_arguments(args);
 
-        if (file_exists(
-                mutable_string(
-                    database,
-                    command.output_path_offset)) &&
+        bool outputs_exist = true;
+        if (command.outputs_count != 0) {
+            for (uint64_t j = 0; j < command.outputs_count; ++j) {
+                const uint64_t offset =
+                    database.arguments[command.outputs_offset + j];
+                if (!file_exists(mutable_string(database, offset))) {
+                    outputs_exist = false;
+                    break;
+                }
+            }
+        } else {
+            outputs_exist = file_exists(
+                mutable_string(database, command.output_path_offset));
+        }
+
+        if (outputs_exist &&
             hash_equals(
-                database.hashes[
-                    command.state_hash_index],
+                database.hashes[command.state_hash_index],
                 current_hash)) {
 
             std::cout
@@ -5707,18 +5733,20 @@ int build(
         const CommandRecord &command =
             database.commands[i];
 
-        if (command.output_path_offset == 0)
-            continue;
-
-        std::string output =
-            database_string_copy(
-                database,
-                command.output_path_offset);
-
-        if (!output.empty())
-            producers.emplace(
-                std::move(output),
-                static_cast<size_t>(i));
+        if (command.outputs_count != 0) {
+            for (uint64_t j = 0; j < command.outputs_count; ++j) {
+                const uint64_t offset =
+                    database.arguments[command.outputs_offset + j];
+                std::string output = database_string_copy(database, offset);
+                if (!output.empty())
+                    producers.emplace(std::move(output), static_cast<size_t>(i));
+            }
+        } else if (command.output_path_offset != 0) {
+            std::string output = database_string_copy(
+                database, command.output_path_offset);
+            if (!output.empty())
+                producers.emplace(std::move(output), static_cast<size_t>(i));
+        }
     }
 
     // Expand the selected targets through their artifact dependencies.

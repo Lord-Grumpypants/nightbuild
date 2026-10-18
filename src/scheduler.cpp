@@ -267,17 +267,20 @@ void Scheduler::build_graph()
         const CommandRecord &command =
             database.commands[i];
 
-        const std::string output =
-            mutable_string(
-                database,
-                command.output_path_offset);
-
-        if (output.empty())
-            continue;
-
-        producers.emplace(
-            output,
-            i);
+        if (command.outputs_count != 0) {
+            for (std::uint64_t j = 0; j < command.outputs_count; ++j) {
+                const std::uint64_t offset =
+                    database.arguments[command.outputs_offset + j];
+                const std::string output = mutable_string(database, offset);
+                if (!output.empty())
+                    producers.emplace(output, i);
+            }
+        } else {
+            const std::string output =
+                mutable_string(database, command.output_path_offset);
+            if (!output.empty())
+                producers.emplace(output, i);
+        }
     }
 
     /*

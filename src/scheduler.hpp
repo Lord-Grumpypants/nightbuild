@@ -17,7 +17,7 @@ static constexpr char COMMAND_MAGIC[8] = {
     'N', 'B', 'C', 'M', 'D', 'B', '\0', '\0'
 };
 
-static constexpr std::uint32_t COMMAND_VERSION = 4;
+static constexpr std::uint32_t COMMAND_VERSION = 5;
 
 #pragma pack(push, 1)
 
@@ -68,6 +68,8 @@ struct CommandRecord {
 
     std::uint64_t argc;
     std::uint64_t argv_offset;
+    std::uint64_t outputs_offset;
+    std::uint64_t outputs_count;
 
     std::uint64_t description_offset;
 
