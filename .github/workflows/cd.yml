@@ -1,0 +1,179 @@
+name: NightBuild CD
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release (for example, v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: nightbuild-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release tag and CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out NightBuild
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Validate release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG"
+            exit 1
+          fi
+
+          if ! git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            echo "Tag does not exist: $RELEASE_TAG"
+            exit 1
+          fi
+
+          SHA="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+          echo "Release tag: $RELEASE_TAG"
+          echo "Release commit: $SHA"
+
+      - name: Wait for successful CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 60); do
+            RUNS="$(gh run list \
+              --repo "$GH_REPO" \
+              --workflow ci.yml \
+              --commit "$RELEASE_SHA" \
+              --limit 100 \
+              --json databaseId,headSha,status,conclusion \
+              --jq "[.[] | select(.headSha == \"$RELEASE_SHA\") ]")"
+
+            if echo "$RUNS" | jq -e \
+              '[.[] | select(.status == "completed" and .conclusion == "success")] | length > 0' \
+              >/dev/null; then
+              echo "Successful CI run found for $RELEASE_SHA"
+              exit 0
+            fi
+
+            if echo "$RUNS" | jq -e \
+              'length > 0 and all(.[]; .status == "completed") and all(.[]; .conclusion != "success")' \
+              >/dev/null; then
+              echo "CI completed without a successful run for $RELEASE_SHA"
+              echo "$RUNS" | jq .
+              exit 1
+            fi
+
+            echo "Waiting for CI for $RELEASE_SHA ($attempt/60)..."
+            sleep 10
+          done
+
+          echo "Timed out waiting for successful CI for $RELEASE_SHA"
+          exit 1
+
+  release:
+    name: Build and publish release
+    needs: verify
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out NightBuild
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Confirm release commit
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          TAG_SHA="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          CHECKOUT_SHA="$(git rev-parse HEAD)"
+
+          if [ "$TAG_SHA" != "$CHECKOUT_SHA" ]; then
+            echo "Checked-out commit does not match the release tag."
+            echo "Tag:      $TAG_SHA"
+            echo "Checkout: $CHECKOUT_SHA"
+            exit 1
+          fi
+
+      - name: Build optimized release
+        run: python3 bootstrap.py
+
+      - name: Prepare release package
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f nightbuild ]; then
+            echo "Expected executable not found: nightbuild"
+            echo "Repository root:"
+            ls -la
+
+            if [ -d out/Official ]; then
+              echo "Official build output:"
+              find out/Official -maxdepth 3 -type f -print
+            fi
+
+            exit 1
+          fi
+
+          mkdir -p release
+          cp nightbuild release/nightbuild
+          chmod +x release/nightbuild
+
+          file release/nightbuild
+
+          tar -czf "nightbuild-${RELEASE_TAG}-macos-arm64.tar.gz" \
+            -C release nightbuild
+
+          shasum -a 256 \
+            "nightbuild-${RELEASE_TAG}-macos-arm64.tar.gz" \
+            > "nightbuild-${RELEASE_TAG}-macos-arm64.tar.gz.sha256"
+
+          cat "nightbuild-${RELEASE_TAG}-macos-arm64.tar.gz.sha256"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$RELEASE_TAG" \
+            "nightbuild-${RELEASE_TAG}-macos-arm64.tar.gz" \
+            "nightbuild-${RELEASE_TAG}-macos-arm64.tar.gz.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "NightBuild $RELEASE_TAG" \
+            --generate-notes
