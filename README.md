@@ -12,13 +12,21 @@ No CMake language to learn. No enormous build-system configuration. No generated
 
 ## Quick Start
 
-Clone NightBuild and run the bootstrap:
+### Download a Release
+
+Download **NightBuild 0.3.0** from the [GitHub Releases page](https://github.com/Lord-Grumpypants/nightbuild/releases) and follow the release instructions.
+
+### Build from Source
+
+To build NightBuild yourself, clone the repository and run the bootstrap script:
 
 ```bash
 git clone https://github.com/Lord-Grumpypants/nightbuild.git
 cd nightbuild
 python3 bootstrap.py
 ```
+
+The bootstrap builds NightBuild, performs PGO training, and produces an optimized executable.
 
 ## Why NightBuild?
 
