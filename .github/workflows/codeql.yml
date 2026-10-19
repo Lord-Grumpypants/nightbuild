@@ -36,7 +36,8 @@ jobs:
     - name: Run NightBuild Bootstrap and Build with CodeQL Tracing
       shell: arch -arm64 /bin/bash {0}
       run: |
-        codeql database trace-command -- python3 bootstrap.py
+        "$CODEQL_DIST/codeql" database trace-command -- python3 bootstrap.py
+
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
