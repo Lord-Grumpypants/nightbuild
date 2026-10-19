@@ -12,13 +12,21 @@ No CMake language to learn. No enormous build-system configuration. No generated
 
 ## Quick Start
 
-### Download a Release
+### Option 1: Download NightBuild 0.3.0
 
-Download **NightBuild 0.3.0** from the [GitHub Releases page](https://github.com/Lord-Grumpypants/nightbuild/releases) and follow the release instructions.
+For Apple Silicon Macs, download the prebuilt executable archive:
 
-### Build from Source
+**[Download NightBuild v0.3.0 for macOS ARM64](https://github.com/Lord-Grumpypants/nightbuild/releases/download/v0.3.0/nightbuild-v0.3.0-macos-arm64.tar.gz)**
 
-To build NightBuild yourself, clone the repository and run the bootstrap script:
+To verify the download, get the accompanying [SHA-256 checksum file](https://github.com/Lord-Grumpypants/nightbuild/releases/download/v0.3.0/nightbuild-v0.3.0-macos-arm64.tar.gz.sha256) and compare its checksum with the downloaded archive.
+
+Extract the archive and follow the included instructions, if any, to run the executable.
+
+**Requirements:** macOS on Apple Silicon (ARM64).
+
+### Option 2: Build from Source
+
+Clone the repository and run the bootstrap script:
 
 ```bash
 git clone https://github.com/Lord-Grumpypants/nightbuild.git
@@ -27,6 +35,12 @@ python3 bootstrap.py
 ```
 
 The bootstrap builds NightBuild, performs PGO training, and produces an optimized executable.
+
+### Source Code
+
+The source code for v0.3.0 is available as a [ZIP archive](https://github.com/Lord-Grumpypants/nightbuild/archive/refs/tags/v0.3.0.zip) or a [tar.gz archive](https://github.com/Lord-Grumpypants/nightbuild/archive/refs/tags/v0.3.0.tar.gz).
+
+NightBuild is licensed under the GNU General Public License v3.0 or later. See `LICENSE` for details.
 
 ## Why NightBuild?
 
