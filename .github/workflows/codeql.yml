@@ -30,13 +30,12 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
+        build-mode: manual
 
     # Runs your all-in-one bootstrap and build sequence on macOS 26
     - name: Run NightBuild Bootstrap and Build
       shell: arch -arm64 /bin/bash {0}
       run: python3 bootstrap.py
 
-
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
-
