@@ -1,133 +1,188 @@
-## Contributing
+# Contributing to NightBuild
 
-We suggest you keep PRs **SMALL**, so review is easy.
+Thanks for your interest in NightBuild!
 
-We also suggest that you get familiar with the project, especially `BUILD.nb`, `args.nb`, manifest semantics, and the generation/execution model before making larger changes.
+NightBuild is a native C++23 build system focused on fast incremental builds, straightforward implementations, and keeping the build machinery simple.
 
-### Good First Projects
+Contributions of all sizes are welcome, including code, tests, documentation, bug reports, performance investigations, and thoughtful design discussions.
 
-If you're new to NightBuild, these are good places to start:
+## Getting Started
 
-* **Improve documentation**
+We suggest keeping PRs **small**, so they're easier to review.
 
-  * Fix unclear explanations
-  * Add examples
-  * Improve command documentation
-  * Document `BUILD.nb` features
-  * Document `args.nb` and `declare_args`
+Before making larger changes, get familiar with the project, especially:
 
-* **Improve CLI help**
+- `BUILD.nb`
+- `args.nb` and `declare_args`
+- Manifest semantics
+- The generation and execution model
+- The generated command database
+- Dependency tracking and incremental build state
 
-  * Clarify command descriptions
-  * Improve error messages
-  * Add missing examples
-  * Make invalid command usage easier to understand
+If you're unsure how something should work, open an issue to discuss it before implementing a substantial change.
 
-* **Add small parser features**
+## Good First Projects
 
-  * Improve diagnostics
-  * Add useful validation
-  * Support small, well-defined manifest conveniences
-  * Add parser tests
+There are plenty of ways to contribute without understanding the entire codebase.
 
-* **Add tests**
+### Documentation
 
-  * Add regression tests for existing features
-  * Test invalid manifests
-  * Test dependency handling
-  * Test incremental builds
-  * Test `args.nb` behavior
-  * Test generator dependencies
+- Fix unclear explanations.
+- Add examples.
+- Improve command documentation.
+- Document `BUILD.nb` features.
+- Document `args.nb` and `declare_args`.
+- Explain architectural decisions.
 
-* **Improve build diagnostics**
+### CLI and Diagnostics
 
-  * Make failures easier to understand
-  * Improve target and dependency error messages
-  * Improve verbose build output
+- Clarify command descriptions.
+- Improve error messages.
+- Add missing examples.
+- Make invalid command usage easier to understand.
+- Improve target and dependency error messages.
+- Improve verbose build output.
 
-* **Improve incremental builds**
+### Parser and Manifest Handling
 
-  * Find cases where unchanged work is rebuilt unnecessarily
-  * Improve build-state validation
-  * Add regression tests for incremental behavior
+- Improve parser diagnostics.
+- Add useful validation.
+- Support small, well-defined manifest conveniences.
+- Add parser regression tests.
+- Test invalid manifests and edge cases.
+- Improve import and argument handling.
 
-* **Improve dependency handling**
+### Tests
 
-  * Add dependency validation
-  * Improve dependency diagnostics
-  * Add tests for more complicated dependency graphs
+- Add regression tests for existing features.
+- Test invalid manifests.
+- Test dependency handling.
+- Test incremental builds.
+- Test `args.nb` behavior.
+- Test generator dependencies and outputs.
+- Cover different target types and build configurations.
 
-* **Improve generator support**
+### Incremental Builds and Dependency Handling
 
-  * Add generator regression tests
-  * Improve generator dependency handling
-  * Improve generated-file validation
+- Find cases where unchanged work is rebuilt unnecessarily.
+- Improve build-state validation.
+- Add regression tests for incremental behavior.
+- Improve dependency validation and diagnostics.
+- Test complicated dependency graphs.
+- Improve generated-file validation.
 
-* **Improve toolchain support**
+### Generator Support
 
-  * Improve existing toolchain definitions
-  * Add tests for toolchain loading
-  * Improve compiler and linker diagnostics
+- Add generator regression tests.
+- Improve generator dependency handling.
+- Improve generated-file validation.
+- Investigate edge cases involving multiple outputs.
 
-* **Improve compile command generation**
+### Toolchains and Compile Commands
 
-  * Fix edge cases
-  * Add coverage for different target types
-  * Improve generated compile command information
+- Improve existing toolchain definitions.
+- Add tests for toolchain loading.
+- Improve compiler and linker diagnostics.
+- Fix compile-command generation edge cases.
+- Add coverage for different target types.
+- Improve generated compile-command information.
 
-* **Improve the scheduler**
+### Scheduler and Performance
 
-  * Improve scheduling heuristics
-  * Add scheduler tests
-  * Improve historical timing data
-  * Investigate scheduling regressions
+- Improve scheduling heuristics.
+- Add scheduler tests.
+- Improve historical timing data.
+- Investigate scheduling regressions.
+- Profile NightBuild.
+- Reduce generation and scheduler overhead.
+- Improve hashing performance.
+- Benchmark changes against the existing tournament.
 
-* **Improve performance**
+Performance improvements should be measured rather than assumed. Reproducible benchmarks and explanations of the results are especially valuable.
 
-  * Profile NightBuild
-  * Reduce generation overhead
-  * Reduce scheduler overhead
-  * Improve hashing performance
-  * Benchmark changes against the existing tournament
+### macOS Support
 
-* **Improve macOS support**
+- Test different target types.
+- Improve framework and application handling.
+- Test Objective-C and Objective-C++ builds.
+- Improve Apple toolchain behavior.
+- Improve filesystem and process-handling diagnostics.
 
-  * Test different target types
-  * Improve framework and application handling
-  * Test Objective-C and Objective-C++ builds
-  * Improve Apple toolchain behavior
+### Bootstrap
 
-* **Improve the bootstrap**
+- Improve dependency detection.
+- Improve bootstrap diagnostics.
+- Make the bootstrap more portable across supported macOS setups.
+- Improve PGO training diagnostics.
 
-  * Improve dependency detection
-  * Improve bootstrap diagnostics
-  * Make the bootstrap more portable across supported macOS setups
-  * Improve PGO training diagnostics
+### Examples
 
-* **Add examples**
+- Small executable projects.
+- Static library projects.
+- Multi-target projects.
+- Projects using `args.nb`.
+- Projects using generators.
 
-  * Small executable projects
-  * Static library projects
-  * Multi-target projects
-  * Projects using `args.nb`
-  * Projects using generators
+## Looking Ahead: Linux Support
 
-If you're looking for something to work on, check the open issues or open an issue describing your idea before starting a larger change.
+Linux support is a **future goal**, not a currently supported platform.
 
-### Before Opening a PR
+We'd welcome help investigating what it would take to bring NightBuild to Linux without compromising its design.
+
+Potential contributions include:
+
+- Identifying macOS-specific assumptions in the codebase.
+- Documenting dependencies on Apple frameworks and system APIs.
+- Investigating Linux compiler and linker toolchain requirements.
+- Examining portability concerns in process management, filesystem operations, and terminal handling.
+- Identifying platform-specific dependencies in the bootstrap.
+- Proposing a minimal, maintainable approach to cross-platform support.
+
+For now, portability investigations and design discussions are welcome. Please open an issue before beginning a substantial portability refactor so we can discuss the approach first.
+
+There's no need to rush into a large cross-platform abstraction before understanding which differences actually need one.
+
+## Interested in the Interesting Bits?
+
+You don't have to start with a bug report or a pull request. Sometimes exploring an implementation is the most interesting part.
+
+**If you enjoy statistics, mathematics, or optimization, take a look at `src/scheduler.cpp`.**
+
+The scheduler is where dependency-aware parallel execution meets scheduling heuristics, historical timing data, and decisions about what work should run next. If you're interested in how to make scheduling decisions intelligently, there's plenty to explore.
+
+**If you enjoy parsing, take a look at `src/toml.cpp`.**
+
+Parser implementations have their own collection of interesting problems: recognizing syntax, handling edge cases, validating input, and producing useful diagnostics. If that kind of work is your thing, you might enjoy digging into it.
+
+They're both quite cool in their own ways. Have a look around, follow the code, and see what you find!
+
+## Before Opening a PR
 
 Please make sure that:
 
-* the project still bootstraps successfully
-* NightBuild can build itself
-* relevant tests pass
-* new behavior has regression coverage where appropriate
-* the change does not introduce an unnecessary dependency
-* the change does not add unnecessary architectural complexity
+- The project still bootstraps successfully.
+- NightBuild can build itself.
+- Relevant tests pass.
+- New behavior has regression coverage where appropriate.
+- The change does not introduce unnecessary dependencies.
+- The change does not add unnecessary architectural complexity.
 
-Please do not add third-party dependencies. Open an issue first if you believe one is necessary.
+### Dependencies
 
-Please do not bloat the software or make large architecture changes. For architecture changes, open an issue before implementing them.
+NightBuild aims to remain lightweight, but that doesn't mean reinventing the wheel.
+
+Prefer existing standard-library functionality when it provides a good solution. However, **don't build a homegrown replacement for an established library or tool just to avoid a dependency** when that library or tool would solve the problem substantially better.
+
+Before introducing a third-party dependency, open an issue explaining:
+
+- The problem it solves.
+- Why existing standard-library functionality or the current implementation isn't sufficient.
+- The alternatives considered.
+- The benefits and trade-offs of the dependency.
+
+Discuss the proposal before adding the dependency. The goal is to make sensible engineering decisions, not to prohibit dependencies categorically.
+
+Please avoid unnecessary bloat and large architectural changes. Open an issue to discuss significant design changes before implementing them.
 
 ## Development
 
@@ -135,42 +190,43 @@ NightBuild is built with native C++23 and is intended to remain lightweight.
 
 When working on the project, prefer:
 
-* existing standard-library functionality over new dependencies
-* small, focused changes
-* straightforward implementations
-* clear diagnostics over clever abstractions
-* generation separate from execution
-* explicit dependency graphs
-* keeping `BUILD.nb` simple
-* keeping `args.nb` focused on configuration
-* keeping the generated command database concrete and deterministic
+- Small, focused changes.
+- Straightforward implementations.
+- Clear diagnostics over clever abstractions.
+- Generation separate from execution.
+- Explicit dependency graphs.
+- Keeping `BUILD.nb` simple.
+- Keeping `args.nb` focused on configuration.
+- Keeping the generated command database concrete and deterministic.
+- Existing standard-library functionality when it is a good fit.
+- Established libraries and tools when they provide a substantially better solution than reinventing existing functionality.
 
-### Areas of the Codebase
+Keep dependencies intentional and implementations maintainable. Simplicity is valuable, but not when it comes at the cost of needlessly rebuilding functionality that already exists.
+
+## Areas of the Codebase
 
 The main areas of NightBuild are intentionally separated:
 
-* **CLI** — command-line parsing, commands, help, and user-facing diagnostics
-* **Manifest parser** — `BUILD.nb`, imports, expressions, targets, and `args.nb`
-* **Build graph** — targets, dependencies, generators, and actions
-* **Scheduler** — dependency-aware parallel execution
-* **Toolchains** — compiler, linker, framework, and package configuration
-* **Incremental state** — hashes, command state, and determining what needs rebuilding
-* **Compile commands** — generation of `compile_commands.json`
-* **TUI** — build progress and live status
-* **Filesystem watching** — filesystem event handling
-* **Tests** — regression coverage for the build system
+- **CLI** — command-line parsing, commands, help, and user-facing diagnostics.
+- **Manifest parser** — `BUILD.nb`, imports, expressions, targets, and `args.nb`.
+- **Build graph** — targets, dependencies, generators, and actions.
+- **Scheduler** — dependency-aware parallel execution.
+- **Toolchains** — compiler, linker, framework, and package configuration.
+- **Incremental state** — hashes, command state, and determining what needs rebuilding.
+- **Compile commands** — generation of `compile_commands.json`.
+- **TUI** — build progress and live status.
+- **Filesystem watching** — filesystem event handling.
+- **Tests** — regression coverage for the build system.
 
 A good contribution should generally fit cleanly into one of these areas rather than introducing a new abstraction across the entire project.
 
-### Design Principles
+## Design Principles
 
 NightBuild deliberately keeps generation and execution separate.
 
-`nightbuild gen` should make the expensive build decisions up front.
-
-`nightbuild args` should configure those decisions without turning `args.nb` into a second build language.
-
-`nightbuild build` should execute the already-generated command graph efficiently.
+- `nightbuild gen` should make the expensive build decisions up front.
+- `nightbuild args` should configure those decisions without turning `args.nb` into a second build language.
+- `nightbuild build` should execute the already-generated command graph efficiently.
 
 When adding a feature, ask:
 
@@ -179,5 +235,20 @@ When adding a feature, ask:
 3. Can it be implemented without adding significant machinery?
 4. Does it belong in generation, configuration, or execution?
 5. Can it be tested independently?
+6. Are we reusing existing functionality where appropriate, or unnecessarily reinventing the wheel?
 
 If a change requires significant architectural complexity, open an issue before implementing it.
+
+## Get Involved
+
+You don't need to arrive with a pull request ready.
+
+Feedback on the architecture, bug reports, reproducible test cases, performance investigations, documentation improvements, and thoughtful design proposals are all valuable contributions.
+
+If you're interested in working on NightBuild, check the open issues or open an issue describing your idea before starting a larger change.
+
+**Constructive criticism is welcome.** If you think something could be simpler, faster, more reliable, or better designed, explain why. Good technical arguments are worth discussing.
+
+The goal is to make NightBuild faster, simpler, and more reliable without compromising its design principles.
+
+Thanks for taking the time to explore NightBuild!
