@@ -1,10 +1,17 @@
 cxx = /opt/homebrew/opt/llvm/bin/clang++
-cflags = -std=c++23 -O3 -march=native -mtune=native -flto=full -fstrict-aliasing -fomit-frame-pointer -fwhole-program-vtables -fvirtual-function-elimination -fstrict-vtable-pointers -fprofile-instr-use=/Users/ninjakiki/Dev/nightbuild/nightbuild.profdata -Wno-profile-instr-unprofiled -Iinclude -I../third_party/xxhash
+objcxx = /opt/homebrew/opt/llvm/bin/clang++
+cflags = -std=c++23 -O3 -march=native -mtune=native -flto=full -fstrict-aliasing -fomit-frame-pointer -fwhole-program-vtables -fvirtual-function-elimination -fstrict-vtable-pointers -fprofile-instr-use=../nightbuild.profdata -Wno-profile-instr-unprofiled -Iinclude -I../third_party/xxhash
+objcxxflags = -std=c++23 -O3 -fno-objc-msgsend-class-selector-stubs -Iinclude
 ldflags = -flto=full -fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld -Wl,--icf=safe
-libs = -framework CoreServices
+libs = -framework CoreServices -framework AppKit
 
 rule cxx
   command = $cxx $cflags -MMD -MF $out.d -c $in -o $out
+  depfile = $out.d
+  deps = gcc
+
+rule objcxx
+  command = $objcxx $objcxxflags -MMD -MF $out.d -c $in -o $out
   depfile = $out.d
   deps = gcc
 
@@ -25,8 +32,9 @@ build obj/toml.o: cxx ../src/toml.cpp
 build obj/scheduler.o: cxx ../src/scheduler.cpp
 build obj/fsevents.o: cxx ../src/fsevents.cpp
 build obj/compile_commands.o: cxx ../src/compile_commands.cpp
+build obj/license_window.o: objcxx ../src/ui/license_window.mm
 build obj/xxhash.o: cc ../third_party/xxhash/xxhash.c
 build libxxhash.a: archive obj/xxhash.o
-build nightbuild: link obj/main.o obj/cli.o obj/toml.o obj/scheduler.o obj/fsevents.o obj/compile_commands.o libxxhash.a
+build nightbuild: link obj/main.o obj/cli.o obj/toml.o obj/scheduler.o obj/fsevents.o obj/compile_commands.o obj/license_window.o libxxhash.a
 
 default nightbuild
