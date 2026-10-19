@@ -33,7 +33,9 @@ jobs:
 
     # Runs your all-in-one bootstrap and build sequence on macOS 26
     - name: Run NightBuild Bootstrap and Build
-      run: arch -arm64 python3 bootstrap.py
+      shell: arch -arm64 /bin/bash {0}
+      run: python3 bootstrap.py
+
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
