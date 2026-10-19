@@ -33,10 +33,9 @@ jobs:
         build-mode: manual
 
     # Runs your all-in-one bootstrap and build sequence on macOS 26
-    - name: Run NightBuild Bootstrap and Build with CodeQL Tracing
+    - name: Run NightBuild Bootstrap and Build
       shell: arch -arm64 /bin/bash {0}
-      run: |
-        "$CODEQL_DIST/codeql" database trace-command -- python3 bootstrap.py
+      run: python3 bootstrap.py
 
 
     - name: Perform CodeQL Analysis
