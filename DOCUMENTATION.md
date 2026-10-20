@@ -1,1823 +1,1110 @@
-# NightBuild Documentation
+# NightBuild Manifest Language
 
-NightBuild is a native C++ build system designed around **simple build descriptions, explicit toolchains, generated command databases, dependency-aware scheduling, and fast incremental builds**.
+NightBuild uses `.nb` files to describe projects, targets, compiler settings, dependencies, and build configuration.
 
-NightBuild uses a small dedicated build description language named:
+The manifest language is designed to keep project configuration concise and readable while giving NightBuild enough information to construct and execute a build graph.
 
-```text
-BUILD.nb
-```
+Unlike Makefiles or CMake's configuration language, NightBuild manifests use a Python-like, indentation-based syntax with explicit target declarations and property assignments.
 
-The build description describes the project and its targets.
+## Table of Contents
 
-NightBuild then generates a concrete command database and executes that database with its scheduler.
+- [Getting Started](#getting-started)
+- [Basic Syntax](#basic-syntax)
+- [Projects](#projects)
+- [Variables](#variables)
+- [Values and Types](#values-and-types)
+- [Lists](#lists)
+- [Target Declarations](#target-declarations)
+- [Target Types](#target-types)
+- [Target Properties](#target-properties)
+- [Compiler Flags](#compiler-flags)
+- [Conditional Configuration](#conditional-configuration)
+- [Build Arguments](#build-arguments)
+- [Importing Manifests](#importing-manifests)
+- [Default Targets](#default-targets)
+- [Custom Actions](#custom-actions)
+- [Generators](#generators)
+- [Comments](#comments)
+- [Error Handling](#error-handling)
+- [Complete Example](#complete-example)
+- [Language Reference](#language-reference)
 
-The basic architecture is:
+## Getting Started
 
-```text
-BUILD.nb
-    │
-    ▼
-  Parser
-    │
-    ▼
-Project + Targets
-    │
-    ▼
-Dependency Graph
-    │
-    ▼
-Command Database
-    │
-    ▼
-  Scheduler
-    │
-    ▼
-Parallel Build
-```
+A minimal NightBuild project can be described using a `BUILD.nb` file:
 
-NightBuild is designed to keep the common build path simple. Advanced facilities such as includes, actions, and generator dependencies are available for larger projects without making them necessary for ordinary builds.
+    project("HelloWorld")
 
----
+    executable("hello"):
+        sources = ["src/main.cpp"]
 
-# 1. Basic Project Structure
+This declares a project named `HelloWorld` and an executable target named `hello` built from `src/main.cpp`.
 
-A simple NightBuild project can look like:
+Target declarations use a colon followed by an indented block. Properties inside that block describe how NightBuild should build the target.
 
-```text
-project/
+A slightly more complete example:
 
-├── BUILD.nb
-├── src/
-│   ├── main.cpp
-│   └── other.cpp
-├── include/
-│   └── other.h
-└── toolchains/
-    ├── CXX.json
-    └── OBJCXX.json
-```
+    project("Example")
 
-The project description is:
+    default = ["hello"]
 
-```text
-BUILD.nb
-```
+    executable("hello"):
+        sources = ["src/main.cpp"]
+        include_dirs = ["include"]
+        cxxflags = ["-std=c++23", "-O2"]
 
-Generate the build directory with:
+The manifest describes the target without requiring the user to write individual compiler and linker commands.
 
-```text
-nightbuild gen -C build
-```
+## Basic Syntax
 
-Build the default targets with:
+NightBuild manifests use indentation to define blocks.
 
-```text
-nightbuild build -C build
-```
+### Indentation
 
-Build a specific target with:
+Target declarations, conditional statements, and argument declarations introduce blocks using a colon.
 
-```text
-nightbuild build -C build TARGET
-```
+    executable("app"):
+        sources = ["src/main.cpp"]
+        cxxflags = ["-std=c++23"]
 
-Build multiple targets with:
+Use spaces for indentation. Tabs are not permitted for indentation.
 
-```text
-nightbuild build -C build TARGET1 TARGET2
-```
+Statements at the same indentation level belong to the same block.
 
----
+### Assignments
 
-# 2. BUILD.nb
+Use `=` to assign a value:
 
-`BUILD.nb` is NightBuild's native build description language.
+    sources = ["src/main.cpp"]
 
-Unlike a general configuration format, `BUILD.nb` is designed specifically around NightBuild's project and target model.
+Use `+=` to append values to an existing list:
 
-A minimal build description looks like:
+    sources += ["src/renderer.cpp"]
 
-```text
-project("My Application")
+For target properties, `+=` appends to the property's existing values.
 
-default = [
-    "myapp",
-]
+For variables, `+=` requires the variable to have already been defined as a list.
 
-executable("myapp"):
+### Identifiers
+
+Variable names and argument names must begin with a letter or underscore. Subsequent characters may contain letters, digits, or underscores.
+
+Valid identifiers include:
+
+    sources
+    build_mode
+    _internal
+    optimization_level
+
+Identifiers are case-sensitive.
+
+## Projects
+
+Use `project()` to declare the project name.
+
+    project("NightBuildExample")
+
+The argument must be a quoted string.
+
+A project can also define its default targets:
+
+    project("NightBuildExample")
+
+    default = ["app"]
+
+The `default` property accepts a string or a list of strings.
+
+Using `+=` appends targets to the existing default-target list:
+
+    default = ["app"]
+    default += ["tests"]
+
+Every default target must correspond to a declared target.
+
+## Variables
+
+Variables allow values to be reused throughout a manifest.
+
+    common_sources = [
+        "src/core.cpp",
+        "src/config.cpp"
+    ]
+
+    common_flags = [
+        "-std=c++23",
+        "-Wall"
+    ]
+
+    executable("app"):
+        sources = common_sources
+        cxxflags = common_flags
+
+Variable references use the variable name directly, without a prefix.
+
+Variables must be defined before they are referenced.
+
+### Appending to Variables
+
+Use `+=` to append a value or another list:
+
+    sources = ["src/main.cpp"]
+    sources += ["src/renderer.cpp"]
+
+    more_sources = ["src/platform.cpp"]
+    sources += more_sources
+
+The variable on the left side must already exist and contain a list.
+
+Appending to an undefined variable or a non-list variable produces an error.
+
+### Variable Scope
+
+Variables are maintained by the manifest parser's shared configuration state. Imported manifests are parsed using the same variable state, allowing configuration values to be reused across files.
+
+Variables are configuration values, not general-purpose programming variables. The language does not provide arbitrary function calls, loops, or general expression evaluation.
+
+## Values and Types
+
+The manifest language supports three value types:
+
+| Type | Examples |
+|---|---|
+| String | `"src/main.cpp"` |
+| Boolean | `true`, `false` |
+| List | `["a.cpp", "b.cpp"]` |
+
+### Strings
+
+Strings must be enclosed in double quotes.
+
+    project("MyProject")
+
+Supported escape sequences include:
+
+| Escape | Meaning |
+|---|---|
+| `\"` | Double quote |
+| `\\` | Backslash |
+| `\n` | Newline |
+| `\t` | Tab |
+
+Unsupported escape sequences produce an error.
+
+### Booleans
+
+Boolean values can be written as:
+
+    enable_feature = true
+    debug_build = false
+
+The parser accepts both lowercase and initial-capital forms:
+
+    enabled = true
+    disabled = false
+
+    enabled = True
+    disabled = False
+
+Boolean values are particularly useful in conditional configuration.
+
+### Lists
+
+Lists use square brackets and comma-separated values.
+
     sources = [
         "src/main.cpp",
+        "src/renderer.cpp",
+        "src/platform.cpp"
     ]
-```
 
-The basic syntax consists of:
+Lists can contain strings, booleans, or nested lists at the parser level. However, properties such as `sources`, `dependencies`, and `cxxflags` require strings or lists of strings.
 
-```text
-project(...)
-```
+A trailing comma is not required.
 
-for the project declaration,
+Multiline lists are supported:
 
-```text
-default = [...]
-```
+    cxxflags = [
+        "-std=c++23",
+        "-O3",
+        "-Wall"
+    ]
 
-for the default target list,
+## Target Declarations
 
-and target declarations such as:
+Targets are the primary building blocks of a NightBuild project.
 
-```text
-executable("name"):
-```
+The general syntax is:
 
-followed by indented target properties.
-
----
-
-# 3. Project Declaration
-
-A NightBuild project begins with a project declaration:
-
-```text
-project("NightBuild")
-```
-
-The string identifies the project.
+    target_type("target_name"):
+        property = value
 
 For example:
 
-```text
-project("My Application")
-```
+    executable("editor"):
+        sources = ["src/main.cpp"]
+        include_dirs = ["include"]
 
-The project declaration establishes the project represented by the `BUILD.nb` file.
+The declaration identifies the target type and name. Its indented block specifies its configuration.
 
----
+Target names must be unique across the loaded project, including imported manifests.
 
-# 4. Default Targets
+### Multiple Targets
 
-A project can explicitly define which targets are built when no target names are supplied.
+A project can declare multiple targets:
 
-Use:
+    project("Editor")
 
-```text
-default = [
-    "nightbuild",
-    "test",
-]
-```
+    static_library("core"):
+        sources = [
+            "src/core.cpp",
+            "src/document.cpp"
+        ]
 
-For example:
+    executable("editor"):
+        sources = ["src/main.cpp"]
+        dependencies = ["core"]
 
-```text
-project("NightBuild")
+Targets are stored by name and validated after manifest loading.
 
-default = [
-    "nightbuild",
-    "test",
-]
-```
+## Target Types
 
-Then:
+NightBuild supports the following target declarations.
 
-```text
-nightbuild build -C build
-```
+### Executable
 
-selects the targets listed by `default`.
+Creates an executable target.
 
-This makes the project's normal build set explicit.
+    executable("app"):
+        sources = ["src/main.cpp"]
 
-A project does not have to build every declared target by default.
+If no output is specified, the output defaults to the target name.
 
-For example:
+### App
 
-```text
-project("Example")
+Declares a macOS application target.
 
-default = [
-    "app",
-]
-```
+    app("MyApplication"):
+        sources = ["src/main.mm"]
 
-can declare additional targets without automatically building them.
+If no output is specified, the output defaults to `MyApplication.app`.
 
----
+### Static Library
 
-# 5. Targets
+Declares a static library.
 
-Targets are the fundamental build units in NightBuild.
+    static_library("core"):
+        sources = [
+            "src/core.cpp",
+            "src/parser.cpp"
+        ]
 
-A target is declared using a target constructor:
+The alias `static_lib` is also supported.
 
-```text
-executable("myapp"):
-```
+If no output is specified, the default output is `libcore.a`.
 
-Properties belonging to that target are indented underneath it:
+### Shared Library
 
-```text
-executable("myapp"):
+Declares a shared library.
+
+    shared_library("engine"):
+        sources = ["src/engine.cpp"]
+
+The alias `shared_lib` is also supported.
+
+If no output is specified, the default output is `libengine.dylib`.
+
+### Object
+
+Declares an object target.
+
+    object("parser"):
+        sources = ["src/parser.cpp"]
+
+An object target must contain exactly one source file.
+
+If no output is specified, the default output is `parser.o`.
+
+### Framework
+
+Declares a framework target.
+
+    framework("Graphics"):
+        sources = ["src/graphics.mm"]
+
+If no output is specified, the default output is `Graphics.framework`.
+
+### Generator
+
+Declares a generator target.
+
+    generator("generated_sources"):
+        sources = ["tools/generate.cpp"]
+        generator_deps = ["generator_support"]
+
+Generator targets must have at least one source.
+
+They cannot use ordinary `dependencies`. Use `generator_deps` to express dependencies on other generator targets.
+
+The parser recognizes generator targets as a distinct target type, and project validation enforces their dependency rules.
+
+### Action
+
+Declares a custom action target.
+
+    action("generate_version"):
+        action = ["python3", "tools/version.py"]
+        inputs = ["tools/version.py"]
+        outputs = ["generated/version.h"]
+
+The alias `action()` maps to the internal `ACTION` target type.
+
+An action must specify an `action` command and either `output` or `outputs`.
+
+See [Custom Actions](#custom-actions) for details.
+
+## Target Properties
+
+Target properties configure the target's inputs, dependencies, compiler settings, and outputs.
+
+### Sources
+
+Specifies source files.
+
+    sources = ["src/main.cpp"]
+
+Multiple source files can be listed:
+
     sources = [
         "src/main.cpp",
-    ]
-```
-
-The target name is the string passed to the target constructor.
-
-For:
-
-```text
-executable("test"):
-```
-
-the target name is:
-
-```text
-test
-```
-
-and it can be selected with:
-
-```text
-nightbuild build -C build test
-```
-
----
-
-# 6. Target Types
-
-NightBuild supports several target types.
-
-The core target types include:
-
-```text
-executable
-app
-static_lib
-shared_lib
-object
-framework
-```
-
-NightBuild also supports specialized build operations for advanced projects, including action and generator-related functionality.
-
-The ordinary compilation path generally consists of:
-
-```text
-sources
-    ↓
-compile
-    ↓
-link
-```
-
-Advanced target types and operations extend this model when a project requires them.
-
----
-
-# 7. Executable Targets
-
-An executable target is declared with:
-
-```text
-executable("name"):
-```
-
-For example:
-
-```text
-executable("myapp"):
-    sources = [
-        "src/main.cpp",
-        "src/app.cpp",
-    ]
-```
-
-NightBuild compiles the source files and produces an executable.
-
-A complete minimal project is therefore:
-
-```text
-project("My Application")
-
-default = [
-    "myapp",
-]
-
-executable("myapp"):
-    sources = [
-        "src/main.cpp",
-    ]
-```
-
----
-
-# 8. Multiple Targets
-
-A single `BUILD.nb` file can contain multiple targets.
-
-For example:
-
-```text
-project("NightBuild")
-
-default = [
-    "nightbuild",
-    "test",
-]
-
-executable("nightbuild"):
-    sources = [
-        "src/main.cpp",
-        "src/cli.cpp",
-        "src/scheduler.cpp",
+        "src/application.cpp"
     ]
 
-executable("test"):
-    sources = [
-        "tests/main.cpp",
-    ]
-```
+The `+=` operator appends additional sources.
 
-The generated command database contains operations for both targets.
+Non-action, non-generator targets must have at least one source.
 
-The targets can then be selected independently:
+### Dependencies
 
-```text
-nightbuild build -C build nightbuild
-```
+Specifies dependencies on other targets.
 
-or:
+    dependencies = ["core", "utilities"]
 
-```text
-nightbuild build -C build test
-```
+The shorter alias `deps` is also supported:
 
----
+    deps = ["core", "utilities"]
 
-# 9. Target Selection
+Dependencies must refer to existing targets.
 
-NightBuild supports explicit target selection from the command line.
+A target cannot depend on itself. Generator targets cannot be used as ordinary dependencies; use `generator_deps` instead.
 
-Build the project's default targets:
+### Generator Dependencies
 
-```text
-nightbuild build -C build
-```
+Specifies dependencies on generator targets.
 
-Build one target:
+    generator_deps = ["generate_headers"]
 
-```text
-nightbuild build -C build test
-```
+Every entry must refer to an existing target whose type is `generator`.
 
-Build multiple targets:
+A target cannot use itself as a generator dependency.
 
-```text
-nightbuild build -C build nightbuild test
-```
+### Include Directories
 
-Target selection operates on the generated build graph.
-
-If a selected target has dependencies, the required dependencies are included in the selected build.
-
----
-
-# 10. Sources
-
-Sources are declared with the `sources` property:
-
-```text
-executable("myapp"):
-    sources = [
-        "src/main.cpp",
-        "src/app.cpp",
-    ]
-```
-
-Multiple source files can be supplied:
-
-```text
-sources = [
-    "src/main.cpp",
-    "src/foo.cpp",
-    "src/bar.cpp",
-]
-```
-
-NightBuild determines how each source is compiled from its file extension and available toolchains.
-
-For example:
-
-```text
-.cpp → CXX
-.mm  → OBJCXX
-```
-
-A target can therefore contain multiple source languages when the corresponding toolchains are available.
-
----
-
-# 11. Include Directories
-
-Include directories are specified with:
-
-```text
-include_dirs = [
-    "include",
-]
-```
-
-For example:
-
-```text
-executable("myapp"):
-    sources = [
-        "src/main.cpp",
-    ]
+Specifies include directories.
 
     include_dirs = [
         "include",
+        "third_party/include"
     ]
-```
 
-NightBuild converts the configured directories into compiler include options.
+### C Compiler Flags
 
-A source can then include a header from that directory:
+Specifies C compiler flags.
 
-```text
-#include "app.h"
-```
-
-Include directories belong to the target that uses them.
-
----
-
-# 12. Compiler Flags
-
-Compiler flags are specified with:
-
-```text
-cflags = [
-    "-std=c++23",
-    "-O3",
-    "-march=native",
-]
-```
-
-For example:
-
-```text
-executable("myapp"):
     cflags = [
+        "-Wall",
+        "-Wextra"
+    ]
+
+### C++ Compiler Flags
+
+Specifies C++ compiler flags.
+
+    cxxflags = [
         "-std=c++23",
-        "-O3",
-        "-march=native",
+        "-O3"
     ]
-```
 
-These flags become part of the generated compilation commands.
+### Linker Flags
 
-NightBuild can therefore detect when the effective compilation command changes and invalidate the appropriate build operations.
+Specifies linker flags.
 
----
-
-# 13. Linker Flags
-
-Linker-specific flags are specified with:
-
-```text
-ldflags = [
-    "-flto=full",
-]
-```
-
-For example:
-
-```text
-executable("myapp"):
     ldflags = [
-        "-flto=full",
-    ]
-```
-
-These flags are applied to the generated link command.
-
-Compiler flags and linker flags are separate because they affect different build operations.
-
----
-
-# 14. pkg-config
-
-External packages can be specified with:
-
-```text
-pkg_config = [
-    "notcurses",
-]
-```
-
-For example:
-
-```text
-executable("nightbuild"):
-    pkg_config = [
-        "notcurses",
-    ]
-```
-
-NightBuild incorporates the resulting compiler and linker configuration into the target's generated commands.
-
-An empty list is valid:
-
-```text
-pkg_config = []
-```
-
----
-
-# 15. Library Directories
-
-Library search directories are specified with:
-
-```text
-library_dirs = [
-    "lib",
-]
-```
-
-Multiple directories can be supplied:
-
-```text
-library_dirs = [
-    "lib",
-    "third_party/lib",
-]
-```
-
-The directories are used when generating the target's link command.
-
-An empty list is valid:
-
-```text
-library_dirs = []
-```
-
----
-
-# 16. Libraries
-
-Libraries are specified without the `-l` prefix.
-
-For example:
-
-```text
-libraries = [
-    "foo",
-    "bar",
-]
-```
-
-NightBuild generates the corresponding linker arguments:
-
-```text
--lfoo
--lbar
-```
-
-An empty list is valid:
-
-```text
-libraries = []
-```
-
----
-
-# 17. Apple Frameworks
-
-macOS frameworks are specified with:
-
-```text
-frameworks = [
-    "Foundation",
-    "AppKit",
-]
-```
-
-NightBuild generates the corresponding linker arguments:
-
-```text
--framework Foundation
--framework AppKit
-```
-
-Frameworks are particularly useful for macOS application targets and Objective-C or Objective-C++ sources.
-
----
-
-# 18. Toolchain Includes
-
-A target can include one or more external toolchain definitions.
-
-For example:
-
-```text
-toolchain_include = [
-    "toolchains/OBJCXX.json",
-    "toolchains/CXX.json",
-]
-```
-
-Toolchain files describe how NightBuild should compile particular source types.
-
-A toolchain can specify properties such as:
-
-```text
-name
-extension
-compiler
-flags_key
-dependency flags
-description
-output extension
-```
-
-For example:
-
-```json
-{
-    "name": "Objective-C++",
-    "extension": ".mm",
-    "compiler": "clang++",
-    "flags_key": "objcxxflags",
-    "description": "OBJCXX",
-    "output_extension": ".o"
-}
-```
-
----
-
-# 19. Toolchain Selection
-
-When NightBuild encounters a source file, it uses the source extension to select an appropriate toolchain.
-
-For example:
-
-```text
-src/main.cpp
-      │
-      ▼
-     .cpp
-      │
-      ▼
-     CXX
-      │
-      ▼
-   clang++
-```
-
-and:
-
-```text
-src/main.mm
-      │
-      ▼
-     .mm
-      │
-      ▼
-    OBJCXX
-      │
-      ▼
-   clang++
-```
-
-This allows a target to combine different source types without manually specifying a compiler for every file.
-
----
-
-# 20. Dependencies
-
-Targets can depend on other targets.
-
-For example:
-
-```text
-static_lib("library"):
-    sources = [
-        "src/library.cpp",
+        "-Wl,-dead_strip"
     ]
 
-executable("app"):
-    sources = [
-        "src/main.cpp",
-    ]
+### Toolchain Includes
 
-    deps = [
-        "library",
-    ]
-```
+Specifies JSON files that define compiler toolchains for a target. Toolchain definitions configure the compiler executable, source-file extension, compiler flags property, dependency-generation flags, and output-file extension.
 
-The dependency relationship is:
-
-```text
-app
- │
- ▼
-library
-```
-
-NightBuild ensures that the required dependency is available before the dependent target reaches its final build operation.
-
----
-
-# 21. Dependency Graph
-
-NightBuild resolves target dependencies during generation.
-
-For example:
-
-```text
-app
- │
- ├── library
- │    │
- │    └── base
- │
- └── other
-```
-
-produces a dependency graph that determines the valid execution order.
-
-Independent portions of the graph can still execute in parallel.
-
-For example:
-
-```text
-        app
-       /   \
- library   other
-    │
-   base
-```
-
-allows `other` and `library` to progress independently when their own dependencies are ready.
-
----
-
-# 22. Dependency Validation
-
-NightBuild validates the target graph during generation.
-
-Unknown dependencies are errors.
-
-Circular dependencies are errors.
-
-For example:
-
-```text
-A → B
-B → A
-```
-
-forms a cycle and cannot be resolved into a valid build order.
-
-A valid graph must provide an ordering in which every target's dependencies can become available.
-
----
-
-# 23. Generation
-
-NightBuild separates generation from execution.
-
-Generation is performed with:
-
-```text
-nightbuild gen -C build
-```
-
-The generator reads:
-
-```text
-BUILD.nb
-```
-
-and produces the concrete build representation.
-
-Conceptually:
-
-```text
-BUILD.nb
-    │
-    ▼
-  Parser
-    │
-    ▼
-Project + Targets
-    │
-    ▼
-Dependency Resolution
-    │
-    ▼
-Command Generation
-    │
-    ▼
-build/commands
-```
-
-Generation does not perform the normal compilation itself.
-
----
-
-# 24. Command Database
-
-NightBuild stores generated build operations in a command database.
-
-The command database contains concrete build operations produced during generation.
-
-Conceptually:
-
-```text
-BUILD.nb
-    │
-    ▼
-Generation
-    │
-    ▼
-build/commands
-    │
-    ▼
-Scheduler
-```
-
-The execution phase can therefore work from concrete commands rather than repeatedly interpreting the high-level project description.
-
-Command records can represent operations such as:
-
-```text
-PRE
-CXX
-OBJECT
-LINK
-ACTION
-```
-
-depending on the project.
-
----
-
-# 25. Scheduler
-
-The NightBuild scheduler executes the generated command graph.
-
-The scheduler tracks:
-
-* command dependencies
-* ready commands
-* completed commands
-* command priorities
-* estimated work
-* resource pressure
-* newly unlocked work
-
-Conceptually:
-
-```text
-Command Database
-       │
-       ▼
-    Scheduler
-       │
-       ├── ready commands
-       ├── dependency state
-       ├── priority
-       ├── estimates
-       └── resource pressure
-       │
-       ▼
-Parallel execution
-```
-
-The scheduler is designed around the common compilation workload and attempts to keep useful work running whenever dependencies and system resources allow it.
-
----
-
-# 26. Parallel Builds
-
-Independent commands can run concurrently.
-
-For example:
-
-```text
-main.cpp
-foo.cpp
-bar.cpp
-scheduler.cpp
-```
-
-can be compiled independently:
-
-```text
-CXX main.cpp
-CXX foo.cpp
-CXX bar.cpp
-CXX scheduler.cpp
-```
-
-Once the required object files are available, the link command becomes ready:
-
-```text
-CXX ─┐
-CXX ─┤
-CXX ─┼──→ LINK
-CXX ─┘
-```
-
-NightBuild's scheduler determines when commands become executable.
-
----
-
-# 27. Incremental Builds
-
-NightBuild performs incremental builds using generated commands and build state.
-
-When a build is repeated, NightBuild determines which operations still need to execute.
-
-An up-to-date build can produce:
-
-```text
-nightbuild: no work to do.
-```
-
-Only the necessary operations are executed when something changes.
-
----
-
-# 28. Hash-Based Build State
-
-NightBuild uses content-based hashing as an important part of incremental build decisions.
-
-A file's modification timestamp changing does not necessarily mean that its contents changed.
-
-Conceptually:
-
-```text
-timestamp changed
-        ≠
-content changed
-```
-
-This allows operations to remain valid when a file has merely been touched without changing its contents.
-
-Command configuration can also participate in build identity.
-
-Therefore a change to compiler flags, linker flags, or other command inputs can cause the affected operation to be rebuilt.
-
----
-
-# 29. Missing Outputs
-
-If an expected output is missing, NightBuild can determine which operation must recreate it.
-
-For example:
-
-```text
-rm -rf test
-```
-
-followed by:
-
-```text
-nightbuild build -C build test
-```
-
-causes the necessary build operations to run again.
-
-A missing output does not require unrelated targets to be rebuilt.
-
----
-
-# 30. Command Changes
-
-Build commands are part of the generated build state.
-
-For example, changing:
-
-```text
--O2
-```
-
-to:
-
-```text
--O3
-```
-
-changes the compilation command.
-
-The build system can therefore distinguish:
-
-```text
-same source
-+
-same command
-```
-
-from:
-
-```text
-same source
-+
-different command
-```
-
-The latter requires the affected operation to be rebuilt.
-
----
-
-# 31. Rebuild
-
-NightBuild provides an explicit rebuild operation:
-
-```text
-nightbuild rebuild -C build
-```
-
-Rebuild is useful when a developer intentionally wants the project's build outputs to be regenerated rather than relying entirely on normal incremental state.
-
----
-
-# 32. Clean
-
-The `clean` command removes generated build artifacts and state while preserving the source project.
-
-Use:
-
-```text
-nightbuild clean -C build
-```
-
-The source tree and `BUILD.nb` remain intact.
-
----
-
-# 33. Clobber
-
-The `clobber` command removes the generated build directory and its associated generated build data.
-
-Use:
-
-```text
-nightbuild clobber -C build
-```
-
-This is the strongest normal cleanup operation.
-
-The project source tree remains separate from generated build state.
-
----
-
-# 34. Verbose Builds
-
-Normal NightBuild output is designed to remain concise.
-
-Verbose mode can be enabled with:
-
-```text
-nightbuild build -C build --verbose
-```
-
-Verbose mode is useful when debugging generated commands, compiler arguments, linker arguments, or build behavior.
-
----
-
-# 35. Build Output
-
-NightBuild uses compact progress information during normal builds.
-
-A build can display progress conceptually like:
-
-```text
-NightBuild · 3/8 · 4 jobs · CXX src/scheduler.cpp
-```
-
-and:
-
-```text
-NightBuild · 8/8 · ✓ LINK nightbuild
-```
-
-The goal is to provide useful information without filling the terminal with unnecessary command output.
-
----
-
-# 36. Objective-C++ macOS Application
-
-A macOS application can combine C++ and Objective-C++ sources.
-
-For example:
-
-```text
-project("Example App")
-
-default = [
-    "app",
-]
-
-executable("app"):
     toolchain_include = [
-        "toolchains/OBJCXX.json",
         "toolchains/CXX.json",
+        "toolchains/OBJCXX.json"
     ]
 
-    sources = [
-        "src/main.mm",
-        "src/app.cpp",
-    ]
+Each entry specifies a path to a JSON toolchain definition. These paths are consumed by the build system during toolchain resolution and build generation.
 
-    include_dirs = [
-        "include",
-    ]
+For example, `toolchains/CXX.json` can define a C++ compiler:
 
-    cflags = [
-        "-std=c++23",
-        "-O3",
-        "-march=native",
-    ]
+    {
+        "name": "C++",
+        "extension": ".cpp",
+        "compiler": "clang++",
+        "flags_key": "cxxflags",
+        "dependency_flags": ["-MMD", "-MF"],
+        "description": "CXX",
+        "output_extension": ".o"
+    }
 
-    frameworks = [
-        "Foundation",
-    ]
-```
+The fields specify the toolchain's name, supported source extension, compiler executable, target property containing compiler flags, dependency-generation arguments, description, and compiled output extension.
 
-The build can conceptually become:
+The `dependency_flags` field accepts an array of compiler arguments. The legacy `dep_flag` string field is also supported for compatibility; new toolchain definitions should prefer `dependency_flags`.
 
-```text
-OBJCXX src/main.mm
-CXX    src/app.cpp
-LINK   app
-```
+Custom JSON toolchains allow projects to configure compiler behavior without modifying NightBuild's source code. The referenced compiler must be available in the build environment, and the target must provide the flag property specified by `flags_key`.
 
----
+### Package Configuration
 
-# 37. PGO Builds
-
-NightBuild can represent profile-guided builds directly as separate targets.
-
-A typical arrangement contains:
-
-```text
-nightbuild
-nightbuild-pgo
-```
-
-The normal target consumes a profile:
-
-```text
--fprofile-instr-use=nightbuild.profdata
-```
-
-while the instrumented target produces profile data:
-
-```text
--fprofile-instr-generate
-```
-
-Conceptually:
-
-```text
-nightbuild-pgo
-      │
-      ▼
-instrumented executable
-      │
-      ▼
-profile data
-      │
-      ▼
-nightbuild.profdata
-      │
-      ▼
-nightbuild
-      │
-      ▼
-optimized executable
-```
-
-This allows NightBuild's own build description to describe its PGO workflow.
-
----
-
-# 38. Example PGO Targets
-
-A PGO-enabled project can contain a normal target:
-
-```text
-executable("nightbuild"):
-    cflags = [
-        "-O3",
-        "-flto=full",
-        "-fprofile-instr-use=nightbuild.profdata",
-    ]
-
-    ldflags = [
-        "-flto=full",
-        "-fprofile-instr-use=nightbuild.profdata",
-    ]
-```
-
-and an instrumented target:
-
-```text
-executable("nightbuild-pgo"):
-    cflags = [
-        "-O3",
-        "-flto=full",
-        "-fprofile-instr-generate",
-    ]
-
-    ldflags = [
-        "-fprofile-instr-generate",
-    ]
-```
-
-The instrumented executable can be used to collect representative profile data for the normal NightBuild executable.
-
----
-
-# 39. Advanced Features
-
-NightBuild provides additional mechanisms for projects whose build graphs become more complicated.
-
-These include:
-
-```text
-includes
-actions
-generator dependencies
-generated sources
-specialized build operations
-```
-
-These features are primarily useful for larger projects.
-
-A small project normally does not need them.
-
-The core NightBuild path remains:
-
-```text
-BUILD.nb
-    ↓
-targets
-    ↓
-sources
-    ↓
-compile
-    ↓
-link
-```
-
----
-
-# 40. Includes
-
-Includes allow a large build description to be organized across multiple build-description files.
-
-This becomes useful when a project contains many targets or distinct project components.
-
-Conceptually:
-
-```text
-BUILD.nb
-    │
-    ├── core targets
-    │
-    ├── application targets
-    │
-    └── included descriptions
-             │
-             ├── test targets
-             └── tool targets
-```
-
-The included definitions are incorporated into the project's build graph during generation.
-
-Includes are primarily an organizational mechanism for larger projects.
-
----
-
-# 41. Actions
-
-Actions represent build operations that are not ordinary source compilation or final linking.
-
-They can be useful for operations such as:
-
-```text
-resource processing
-custom preprocessing
-file generation
-special build steps
-```
-
-Actions extend the command graph when a project needs operations outside the standard compile/link pipeline.
-
-They are not required for ordinary C++ compilation.
-
----
-
-# 42. Generator Dependencies
-
-Some large projects need to build a program and then execute that program during the build.
-
-For example:
-
-```text
-generator program
-       │
-       ▼
-generated source
-       │
-       ▼
-compiler
-```
-
-A generator dependency expresses this relationship.
-
-The generator must first be built.
-
-It can then run and produce files required by later build operations.
-
-This is useful for:
-
-* generated source code
-* schema compilers
-* protocol compilers
-* resource generators
-* other build-time programs
-
-Generator dependencies are an advanced feature intended for projects that actually require generated build inputs.
-
----
-
-# 43. Large Project Graphs
-
-A large project may contain a graph such as:
-
-```text
-application
-    │
-    ├── libraries
-    │
-    ├── generated sources
-    │
-    ├── resource generators
-    │
-    ├── tests
-    │
-    └── build utilities
-```
-
-NightBuild's advanced graph mechanisms allow these relationships to be represented explicitly.
-
-The important design principle is that large-project functionality should **scale the build system without making the basic build model unnecessarily complicated**.
-
----
-
-# 44. Core Versus Advanced Features
-
-NightBuild can be divided conceptually into a core build path and advanced scaling features.
-
-## Core
-
-```text
-BUILD.nb
-    ↓
-project
-    ↓
-targets
-    ↓
-sources
-    ↓
-toolchains
-    ↓
-compile
-    ↓
-link
-    ↓
-incremental build
-```
-
-## Advanced
-
-```text
-includes
-actions
-generator dependencies
-generated sources
-complex dependency graphs
-```
-
-The advanced features exist for projects that need them.
-
-They do not define the normal NightBuild workflow.
-
----
-
-# 45. Complete NightBuild Example
-
-The following represents the structure of a real NightBuild project:
-
-```text
-project("NightBuild")
-
-default = [
-    "nightbuild",
-    "test",
-]
-
-executable("nightbuild"):
-    toolchain_include = [
-        "toolchains/OBJCXX.json",
-        "toolchains/CXX.json",
-    ]
-
-    sources = [
-        "src/main.cpp",
-        "src/cli.cpp",
-        "src/toml.cpp",
-        "src/tui.cpp",
-        "src/scheduler.cpp",
-        "src/fsevents.cpp",
-        "src/compile_commands.cpp",
-    ]
-
-    include_dirs = [
-        "include",
-    ]
-
-    cflags = [
-        "-std=c++23",
-        "-O3",
-        "-march=native",
-        "-mtune=native",
-        "-flto=full",
-        "-fstrict-aliasing",
-        "-fomit-frame-pointer",
-        "-fwhole-program-vtables",
-        "-fvirtual-function-elimination",
-        "-fstrict-vtable-pointers",
-        "-fprofile-instr-use=nightbuild.profdata",
-        "-Wno-profile-instr-unprofiled",
-    ]
+Specifies packages to resolve through `pkg-config`.
 
     pkg_config = [
         "notcurses",
+        "libuv"
     ]
 
-    ldflags = [
-        "-flto=full",
-        "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
-        "-fprofile-instr-use=nightbuild.profdata",
-        "-Wl,--icf=safe",
-    ]
+The manifest parser records these package names for downstream build processing.
 
-    library_dirs = []
+### Library Directories
 
-    libraries = []
-
-    frameworks = [
-        "CoreServices",
-    ]
-
-executable("nightbuild-pgo"):
-    toolchain_include = [
-        "toolchains/CXX.json",
-    ]
-
-    sources = [
-        "src/main.cpp",
-        "src/cli.cpp",
-        "src/toml.cpp",
-        "src/tui.cpp",
-        "src/scheduler.cpp",
-        "src/fsevents.cpp",
-        "src/compile_commands.cpp",
-    ]
-
-    include_dirs = [
-        "include",
-    ]
-
-    cflags = [
-        "-std=c++23",
-        "-O3",
-        "-march=native",
-        "-mtune=native",
-        "-flto=full",
-        "-fstrict-aliasing",
-        "-fomit-frame-pointer",
-        "-fprofile-instr-generate",
-    ]
-
-    pkg_config = [
-        "notcurses",
-    ]
-
-    ldflags = [
-        "-fprofile-instr-generate",
-        "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
-    ]
+Specifies library search directories.
 
     library_dirs = [
-        "/opt/homebrew/opt/llvm/lib/clang/23/lib/darwin",
+        "lib",
+        "third_party/lib"
     ]
+
+### Libraries
+
+Specifies libraries to link against.
 
     libraries = [
-        "clang_rt.profile_osx",
+        "pthread",
+        "z"
     ]
+
+### Frameworks
+
+Specifies frameworks.
 
     frameworks = [
-        "CoreServices",
+        "AppKit",
+        "Foundation",
+        "QuartzCore"
     ]
 
-executable("test"):
-    sources = [
-        "tests/main.cpp",
+### Output
+
+Specifies a single output path.
+
+    output = "out/my_app"
+
+The value must be a string.
+
+The `output` property does not support `+=`.
+
+For action targets, either `output` or `outputs` must be supplied. If only `outputs` is supplied, the first output becomes the primary output.
+
+### Inputs
+
+Specifies inputs for an action target.
+
+    inputs = [
+        "schema.json",
+        "tools/generate.py"
     ]
-```
 
-This demonstrates the major parts of the current NightBuild model:
+The parser stores these paths for downstream build processing.
 
-```text
-project
-default targets
-executable targets
-toolchain includes
-sources
-include directories
-compiler flags
-pkg-config
-linker flags
-library directories
-libraries
-frameworks
-PGO instrumentation
-PGO profile use
-test targets
-```
+### Outputs
 
----
+Specifies outputs for an action target.
 
-# 46. Typical Workflow
+    outputs = [
+        "generated/schema.h",
+        "generated/schema.cpp"
+    ]
 
-A normal NightBuild workflow is:
+At least one output is required for an action target, unless the singular `output` property is supplied.
 
-```text
-Edit BUILD.nb
-      │
-      ▼
-Generate
-      │
-      ▼
-Build
-      │
-      ▼
-Modify source
-      │
-      ▼
-Incremental build
-```
+### Pre-Actions
 
-Generate the project:
+Specifies lists of commands associated with a target's pre-actions.
 
-```text
-nightbuild gen -C build
-```
+    pre_actions = [
+        ["python3", "tools/prepare.py"],
+        ["python3", "tools/check.py"]
+    ]
 
-Build the default targets:
+Each inner list represents a command and its arguments.
 
-```text
-nightbuild build -C build
-```
+Additional commands can be appended:
 
-After modifying a source file:
+    pre_actions += [
+        ["python3", "tools/prepare_more.py"]
+    ]
 
-```text
-nightbuild build -C build
-```
+The parser stores these commands as structured argument lists. Their execution behavior is determined by the build system.
 
-NightBuild determines which commands actually need to execute.
+## Compiler Flags
 
----
+NightBuild supports standard flag properties and additional flag properties.
 
-# 47. Target-Specific Workflow
+The standard properties are:
 
-A project with several targets can select only the desired target.
+    cflags = ["-Wall"]
+    cxxflags = ["-std=c++23", "-O3"]
+    ldflags = ["-Wl,-dead_strip"]
+
+Additional compiler flag groups can be specified using identifiers ending in `flags`.
 
 For example:
 
-```text
-nightbuild build -C build test
-```
+    objcflags = ["-fobjc-arc"]
+    asmflags = ["-g"]
 
-builds the `test` target and its required dependencies.
+The flag property name must be a valid identifier.
 
-Similarly:
+Do not use the `flags.` prefix:
 
-```text
-nightbuild build -C build nightbuild
-```
+    cxxflags = ["-std=c++23"]
 
-builds the NightBuild executable.
+The parser explicitly rejects names such as `flags.cxxflags`.
 
-Multiple targets can be requested:
+### Flag Assignment and Appending
 
-```text
-nightbuild build -C build nightbuild test
-```
+Replace a flag list:
+
+    cxxflags = ["-std=c++23"]
+
+Append to an existing flag list:
+
+    cxxflags += ["-O3"]
+
+For `cxxflags`, NightBuild synchronizes the value with its internal C++ compiler flag storage.
+
+## Conditional Configuration
+
+NightBuild supports `if` and `else` blocks at the project level and inside target declarations.
+
+Conditions can evaluate booleans, compare values, and combine expressions.
+
+### Boolean Conditions
+
+    enable_tests = true
+
+    if enable_tests:
+        executable("tests"):
+            sources = ["tests/main.cpp"]
+
+A condition must evaluate to a boolean.
+
+### Equality
+
+Use `==` to compare values:
+
+    build_mode = "release"
+
+    if build_mode == "release":
+        executable("app"):
+            sources = ["src/main.cpp"]
+
+Use `!=` for inequality:
+
+    if build_mode != "debug":
+        cxxflags = ["-O3"]
+
+The supported comparison operators are `==` and `!=`.
+
+### Logical Operators
+
+Conditions support:
+
+- `and`
+- `or`
+- `not`
+
+Example:
+
+    is_macos = true
+    enable_tests = true
+
+    if is_macos and enable_tests:
+        executable("tests"):
+            sources = ["tests/main.cpp"]
+
+Logical operators can be combined:
+
+    if is_macos and not enable_tests:
+        executable("app"):
+            sources = ["src/main.cpp"]
+
+Parentheses can group expressions:
+
+    if (is_macos and enable_tests):
+        executable("tests"):
+            sources = ["tests/main.cpp"]
+
+The parser evaluates `not` before comparisons, comparisons before `and`, and `and` before `or`.
+
+### Else Blocks
+
+Use `else:` to specify an alternative branch.
+
+    if build_mode == "debug":
+        cxxflags = ["-O0", "-g"]
+    else:
+        cxxflags = ["-O3"]
+
+The `else` block must immediately follow the corresponding `if` block at the same indentation level.
+
+### Conditional Target Properties
+
+Conditions can also be used inside targets.
+
+    executable("app"):
+        sources = ["src/main.cpp"]
+
+        if build_mode == "debug":
+            cxxflags = ["-O0", "-g"]
+        else:
+            cxxflags = ["-O3"]
+
+Only the active branch is applied to the target configuration.
+
+### Supported Condition Values
+
+Conditions can evaluate:
+
+- Boolean literals.
+- Variables containing supported values.
+- Equality and inequality comparisons.
+- Logical expressions using `and`, `or`, and `not`.
+- Parenthesized expressions.
+
+Arithmetic expressions, function calls, loops, and arbitrary code execution are not supported by the condition evaluator.
+
+## Build Arguments
+
+Build arguments allow users to configure a project without editing its main manifest.
+
+### Declaring Arguments
+
+Use `declare_args()` to declare an argument and provide its default value.
+
+    declare_args("build_mode"):
+        default = "release"
+
+Arguments can have string, boolean, or list defaults.
+
+For example:
+
+    declare_args("enable_tests"):
+        default = true
+
+    declare_args("extra_flags"):
+        default = ["-Wall"]
+
+### Overriding Arguments
+
+NightBuild reads overrides from `args.nb` in the selected build directory.
+
+For example, a build directory containing `args.nb` could define:
+
+    build_mode = "debug"
+    enable_tests = false
+    extra_flags = ["-Wall", "-Wextra"]
+
+These values override the corresponding declared defaults.
+
+The argument names must have been declared in the loaded manifest configuration.
+
+Unknown argument names produce an error.
+
+The arguments file supports assignments using `=`. The `+=` operator is not supported in `args.nb`.
+
+### Using Arguments
+
+Declared arguments can be referenced like ordinary variables.
+
+    declare_args("build_mode"):
+        default = "release"
+
+    executable("app"):
+        sources = ["src/main.cpp"]
+
+        if build_mode == "debug":
+            cxxflags = ["-O0", "-g"]
+        else:
+            cxxflags = ["-O3"]
+
+This allows the same manifest to describe different build configurations.
+
+## Importing Manifests
+
+The `import` statement loads another manifest file.
+
+    import "build/common.nb"
+    import "build/libraries.nb"
+
+Imports use paths relative to the directory containing the importing manifest.
+
+An imported file can define variables, targets, and additional imports.
+
+### Organizing a Project
+
+A project can separate shared configuration and targets into multiple files.
+
+Example layout:
+
+    BUILD.nb
+    build/
+        common.nb
+        libraries.nb
+    src/
+        main.cpp
+        core.cpp
+
+Root manifest:
+
+    project("Example")
+
+    import "build/common.nb"
+    import "build/libraries.nb"
+
+    executable("app"):
+        sources = ["src/main.cpp"]
+        dependencies = ["core"]
+
+Shared configuration:
+
+    common_flags = [
+        "-std=c++23",
+        "-Wall"
+    ]
+
+Library manifest:
+
+    static_library("core"):
+        sources = ["src/core.cpp"]
+        cxxflags = common_flags
+
+### Import Resolution
+
+NightBuild resolves imported paths relative to the importing manifest.
+
+Imported files are canonicalized before loading. This allows the loader to identify repeated imports and detect import cycles.
+
+A file already loaded into the project is not loaded a second time.
+
+### Duplicate Targets
+
+Target names must be unique across the complete imported project.
+
+If two manifests declare the same target name, NightBuild reports a duplicate-target error.
+
+### Import Cycles
+
+Circular imports are rejected.
+
+For example, if `BUILD.nb` imports `common.nb`, and `common.nb` imports `BUILD.nb`, NightBuild reports an import-cycle error.
+
+### Configuration Tracking
+
+NightBuild incorporates the paths and contents of loaded manifests into its configuration fingerprint.
+
+Consequently, changes to imported manifest files can affect configuration tracking even when the root manifest itself has not changed.
+
+## Default Targets
+
+The `default` property determines which targets are considered default build targets.
+
+    default = ["app"]
+
+Multiple default targets can be declared:
+
+    default = ["app"]
+    default += ["tests"]
+
+The property accepts either a single string or a list of strings.
+
+Every default target must exist in the completed project. Unknown default targets cause validation to fail.
+
+## Custom Actions
+
+Action targets represent custom commands that produce declared outputs.
+
+    action("generate_version"):
+        action = [
+            "python3",
+            "tools/generate_version.py"
+        ]
+        inputs = ["tools/generate_version.py"]
+        outputs = ["generated/version.h"]
+
+The `action` property is a list of strings representing the command and its arguments.
+
+The action target must specify a command and at least one output.
+
+### Single Output
+
+Use `output` when an action produces one primary output:
+
+    action("generate_config"):
+        action = [
+            "python3",
+            "tools/generate_config.py"
+        ]
+        inputs = ["config.json"]
+        output = "generated/config.h"
+
+### Multiple Outputs
+
+Use `outputs` when an action produces multiple outputs:
+
+    action("generate_parser"):
+        action = [
+            "python3",
+            "tools/generate_parser.py"
+        ]
+        inputs = ["grammar.json"]
+        outputs = [
+            "generated/parser.cpp",
+            "generated/parser.hpp"
+        ]
+
+When `outputs` is specified without `output`, the first entry becomes the primary output.
+
+### Important Notes
+
+The manifest parser validates action declarations and stores their commands, inputs, and outputs. Details such as command execution, dependency scheduling, and output freshness are handled by the build system.
+
+Use action targets for custom build steps that do not fit the standard compilation and linking target types.
+
+## Generators
+
+Generator targets represent targets designated for generating build inputs.
+
+    generator("generate_sources"):
+        sources = ["tools/generate.cpp"]
+        generator_deps = ["generator_support"]
+
+A generator target must have at least one source.
+
+Generator targets cannot declare ordinary target dependencies through `dependencies` or `deps`. Use `generator_deps` for dependencies on other generator targets.
+
+Each generator dependency must exist and must itself be a generator target.
+
+The parser recognizes generator targets separately from ordinary build targets, allowing NightBuild to apply generator-specific dependency rules.
+
+## Comments
+
+Use `#` to begin a comment outside a quoted string.
+
+    # Project declaration
+    project("Example")
+
+    executable("app"):
+        sources = ["src/main.cpp"]  # Main source file
+
+A `#` character inside a quoted string is preserved.
+
+    generated_file = "generated/file#1.hpp"
+
+Comments are removed before the remaining statement is parsed.
+
+## Error Handling
+
+NightBuild validates manifest syntax and project structure and reports errors with the manifest path and line number where applicable.
+
+Examples of errors include:
+
+- Invalid indentation.
+- Unsupported string escape sequences.
+- Unknown variables.
+- Missing assignment values.
+- Invalid target declarations.
+- Unknown target properties.
+- Duplicate target names.
+- Missing source files in target declarations.
+- Invalid target dependency references.
+- Generator dependency violations.
+- Missing action commands or outputs.
+- Unknown build arguments.
+- Duplicate argument declarations.
+- Invalid default targets.
+- Import cycles.
+
+For example, referencing an undefined variable:
+
+    executable("app"):
+        sources = source_files
+
+If `source_files` has not been defined, parsing fails with an unknown-variable error.
+
+Similarly, this declaration is invalid because the target has no source:
+
+    executable("app"):
+        cxxflags = ["-O3"]
+
+A standard executable target must declare at least one source.
+
+## Complete Example
+
+The following example combines project configuration, arguments, imports, variables, conditions, target declarations, and dependencies.
+
+    project("ExampleApp")
+
+    import "build/common.nb"
+
+    declare_args("build_mode"):
+        default = "release"
+
+    declare_args("enable_tests"):
+        default = true
+
+    default = ["app"]
+
+    app_sources = [
+        "src/main.mm",
+        "src/application.mm"
+    ]
+
+    executable("core"):
+        sources = [
+            "src/core.cpp",
+            "src/document.cpp"
+        ]
+        include_dirs = ["include"]
+        cxxflags = common_flags
+
+        if build_mode == "debug":
+            cxxflags += ["-O0", "-g"]
+        else:
+            cxxflags += ["-O3"]
+
+    executable("app"):
+        sources = app_sources
+        dependencies = ["core"]
+        include_dirs = ["include"]
+        cxxflags = common_flags
+
+    if enable_tests:
+        executable("tests"):
+            sources = ["tests/main.cpp"]
+            dependencies = ["core"]
+            cxxflags = common_flags
+
+A corresponding `build/common.nb` could contain:
+
+    common_flags = [
+        "-std=c++23",
+        "-Wall",
+        "-Wextra"
+    ]
+
+An `args.nb` file in the selected build directory could override the defaults:
+
+    build_mode = "debug"
+    enable_tests = false
+
+This keeps shared configuration reusable while allowing build-specific settings to be changed without modifying the main manifest.
+
+## Language Reference
+
+### Project Statements
+
+| Syntax | Description |
+|---|---|
+| `project("name")` | Declares the project name. |
+| `default = ["target"]` | Sets default targets. |
+| `default += ["target"]` | Appends default targets. |
+| `import "path"` | Imports another manifest. |
+| `declare_args("name"):` | Declares a configurable argument. |
+
+### Target Declarations
+
+| Declaration | Target type |
+|---|---|
+| `executable("name"):` | Executable |
+| `app("name"):` | macOS application |
+| `static_library("name"):` | Static library |
+| `static_lib("name"):` | Static library alias |
+| `shared_library("name"):` | Shared library |
+| `shared_lib("name"):` | Shared library alias |
+| `object("name"):` | Object file |
+| `framework("name"):` | Framework |
+| `generator("name"):` | Generator |
+| `action("name"):` | Custom action |
+
+### Supported Properties
+
+| Property | Value type | Purpose |
+|---|---|---|
+| `sources` | String or list of strings | Source files |
+| `dependencies` | String or list of strings | Target dependencies |
+| `deps` | String or list of strings | Dependency alias |
+| `generator_deps` | String or list of strings | Generator dependencies |
+| `include_dirs` | String or list of strings | Include directories |
+| `cflags` | String or list of strings | C compiler flags |
+| `cxxflags` | String or list of strings | C++ compiler flags |
+| `ldflags` | String or list of strings | Linker flags |
+| `toolchain_include` | String or list of strings | Toolchain configuration paths |
+| `pkg_config` | String or list of strings | Package configuration dependencies |
+| `library_dirs` | String or list of strings | Library search directories |
+| `libraries` | String or list of strings | Libraries |
+| `frameworks` | String or list of strings | Frameworks |
+| `action` | String or list of strings | Custom action command |
+| `inputs` | String or list of strings | Action inputs |
+| `outputs` | String or list of strings | Action outputs |
+| `output` | String | Primary output |
+| `pre_actions` | List of lists of strings | Pre-action commands |
+| `*_flags` | String or list of strings | Additional compiler flag groups |
+
+### Operators
+
+| Operator | Purpose |
+|---|---|
+| `=` | Assigns or replaces a value. |
+| `+=` | Appends to an existing list or target property. |
+| `==` | Equality comparison. |
+| `!=` | Inequality comparison. |
+| `and` | Logical conjunction. |
+| `or` | Logical disjunction. |
+| `not` | Logical negation. |
+
+### Language Limitations
+
+The manifest language is intentionally limited to configuration rather than general-purpose programming.
+
+The parser does not implement:
+
+- `for` or `while` loops.
+- Arbitrary function definitions or calls.
+- Arithmetic expression evaluation.
+- General-purpose code execution.
+- Attribute access or object-oriented expressions.
+- Conditional operators beyond the documented comparison and logical operators.
+
+This keeps the manifest focused on describing a build rather than implementing the build logic itself.
 
 ---
 
-# 48. Generation and Execution
-
-NightBuild intentionally separates:
-
-```text
-generation
-```
-
-from:
-
-```text
-execution
-```
-
-Generation answers:
-
-> What commands exist, and how are they connected?
-
-Execution answers:
-
-> Which of those commands actually need to run, and when?
-
-This produces a clean boundary:
-
-```text
-BUILD.nb
-    │
-    ▼
-Generation
-    │
-    ▼
-Concrete command database
-    │
-    ▼
-Execution
-    │
-    ▼
-Scheduler
-```
-
----
-
-# 49. Design Principles
-
-NightBuild follows several principles.
-
-## Keep the common path small
-
-A normal project should be able to describe:
-
-```text
-project
-target
-sources
-toolchains
-flags
-```
-
-without requiring advanced build machinery.
-
-## Generate concrete commands
-
-The build phase should execute a concrete command graph rather than repeatedly interpreting the high-level project description.
-
-## Make dependencies explicit
-
-Target dependencies should be represented directly in the graph.
-
-## Prefer content-based invalidation
-
-Build decisions should depend on relevant content and command identity rather than timestamps alone.
-
-## Exploit parallelism
-
-Independent build operations should execute concurrently whenever possible.
-
-## Scale without forcing complexity
-
-Includes, actions, generators, and more complicated dependency mechanisms should be available when a large project needs them without burdening small projects.
-
-## Keep BUILD.nb readable
-
-The build description should describe the structure of the project rather than becoming a general-purpose programming language.
-
----
-
-# 50. NightBuild Architecture
-
-The complete NightBuild architecture can be summarized as:
-
-```text
-                         BUILD.nb
-                            │
-                            ▼
-                          Parser
-                            │
-                            ▼
-                   Project + Target Model
-                            │
-                 ┌──────────┼──────────┐
-                 │          │          │
-              Sources   Toolchains  Dependencies
-                 │          │          │
-                 └──────────┼──────────┘
-                            │
-                            ▼
-                        Generation
-                            │
-                            ▼
-                    Command Database
-                            │
-                            ▼
-                         Scheduler
-                            │
-             ┌──────────────┼──────────────┐
-             │              │              │
-            CXX            CXX            CXX
-             │              │              │
-             └──────────────┼──────────────┘
-                            │
-                            ▼
-                           LINK
-                            │
-                            ▼
-                          Output
-```
-
----
-
-# 51. Summary
-
-NightBuild's fundamental workflow is:
-
-```text
-BUILD.nb
-    ↓
-Project
-    ↓
-Targets
-    ↓
-Dependencies + Toolchains
-    ↓
-Generated Commands
-    ↓
-Command Database
-    ↓
-Scheduler
-    ↓
-Parallel Build
-    ↓
-Incremental Output
-```
-
-The core project description is intentionally compact:
-
-```text
-project(...)
-default = [...]
-
-executable("name"):
-    ...
-```
-
-Targets describe independently selectable build units.
-
-Sources describe what gets compiled.
-
-Toolchains describe how source files are compiled.
-
-Flags, libraries, frameworks, and packages describe the compilation and linking environment.
-
-Generation converts the high-level build description into concrete operations.
-
-The command database provides the boundary between generation and execution.
-
-The scheduler executes those operations while respecting dependencies and available resources.
-
-Advanced features such as includes, actions, and generator dependencies provide the additional graph machinery required by larger projects.
-
-The central goal of NightBuild is therefore:
-
-> **Describe the build simply. Generate it explicitly. Schedule concrete commands efficiently. Rebuild only what actually needs to change.**
+**NightBuild** — a native C++23 build system for macOS.
