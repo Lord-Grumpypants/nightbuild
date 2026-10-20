@@ -196,10 +196,19 @@ Scheduler::Scheduler(
     : paths(paths),
       database(database)
 {
-    graph.resize(
+    const std::size_t command_count =
         database.header != nullptr
             ? database.header->command_count
-            : 0);
+            : 0;
+
+    graph.resize(command_count);
+    command_keys.resize(command_count);
+    source_sizes.resize(command_count);
+
+    for (std::size_t i = 0; i < command_count; ++i) {
+        command_keys[i] = command_key(database, i);
+        source_sizes[i] = source_size(database, i);
+    }
 
     build_graph();
 
@@ -454,15 +463,11 @@ void Scheduler::enqueue_if_ready(
         unlock;
 
     entry.source_size =
-        source_size(
-            database,
-            command_index);
+        source_sizes[command_index];
 
     const auto it =
         telemetry.find(
-            command_key(
-                database,
-                command_index));
+            command_keys[command_index]);
 
     entry.samples =
         it == telemetry.end()
@@ -584,17 +589,13 @@ double Scheduler::estimate(
         return MIN_ESTIMATE;
 
     const std::uint64_t key =
-        command_key(
-            database,
-            command_index);
+        command_keys[command_index];
 
     const auto it =
         telemetry.find(key);
 
     const std::uint64_t bytes =
-        source_size(
-            database,
-            command_index);
+        source_sizes[command_index];
 
     /*
      * We use the historical average whenever we have one.
@@ -688,9 +689,7 @@ double Scheduler::priority(
         return -std::numeric_limits<double>::infinity();
 
     const std::uint64_t key =
-        command_key(
-            database,
-            command_index);
+        command_keys[command_index];
 
     const auto it =
         telemetry.find(key);
@@ -767,9 +766,7 @@ void Scheduler::record(
             MIN_ESTIMATE);
 
     const std::uint64_t key =
-        command_key(
-            database,
-            command_index);
+        command_keys[command_index];
 
     History &history =
         telemetry[key];

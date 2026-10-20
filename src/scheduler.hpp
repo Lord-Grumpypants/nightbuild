@@ -241,6 +241,8 @@ private:
     MutableCommandDatabase &database;
 
     Telemetry telemetry;
+    std::vector<std::uint64_t> command_keys;
+    std::vector<std::uint64_t> source_sizes;
 
     std::vector<Entry> queue;
 
