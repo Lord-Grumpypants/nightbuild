@@ -5462,6 +5462,13 @@ int compile_parallel_mapped(
                 start_time,
                 pipe_fds[0]
             });
+
+            show_status(
+                std::to_string(completed) + "/" +
+                std::to_string(total_commands) + " · " +
+                std::to_string(running.size()) + "/" +
+                std::to_string(max_jobs) + " jobs · compiling · " +
+                description);
         }
 
         if (running.empty()) {
@@ -5603,8 +5610,10 @@ int compile_parallel_mapped(
 
             show_status(
                 std::to_string(completed) + "/" +
-                std::to_string(total_commands) +
-                " · compiling · ✓ " + description);
+                std::to_string(total_commands) + " · " +
+                std::to_string(running.size()) + "/" +
+                std::to_string(max_jobs) +
+                " jobs · compiling · ✓ " + description);
         }
 
         if (diagnostics_active &&
@@ -5613,7 +5622,9 @@ int compile_parallel_mapped(
             diagnostics_active = false;
             show_status(
                 std::to_string(completed) + "/" +
-                std::to_string(total_commands) + " · compiling" +
+                std::to_string(total_commands) + " · " +
+                std::to_string(running.size()) + "/" +
+                std::to_string(max_jobs) + " jobs · compiling" +
                 (last_job_description.empty()
                     ? std::string()
                     : " · " + last_job_description));
