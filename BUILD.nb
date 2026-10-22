@@ -7,6 +7,9 @@ default = [
 
 import "third_party/xxhash/BUILD.nb"
 
+declare_args("debug"):
+    default = false
+
 executable("nightbuild"):
     toolchain_include = [
         "toolchains/OBJCXX.json",
@@ -48,6 +51,9 @@ executable("nightbuild"):
         "-Wno-profile-instr-unprofiled",
     ]
 
+    if debug:
+        cxxflags += "-g"
+
     pkg_config = []
 
     ldflags = [
@@ -86,6 +92,7 @@ executable("nightbuild-pgo"):
         "src/ui/license_window.mm",
     ]
 
+
     include_dirs = [
         "include",
         "third_party/xxhash",
@@ -103,6 +110,9 @@ executable("nightbuild-pgo"):
         "-fomit-frame-pointer",
         "-fprofile-instr-generate",
     ]
+
+    if debug:
+        cxxflags += "-g"
 
     pkg_config = []
 
@@ -161,6 +171,9 @@ executable("nightbuild-release"):
         "-Wno-profile-instr-unprofiled",
     ]
 
+    if debug:
+        cxxflags += "-g"
+
     pkg_config = []
 
     ldflags = [
@@ -191,3 +204,6 @@ executable("test"):
         "-std=c++23",
         "-O3",
     ]
+
+    if debug:
+        cxxflags += "-g"

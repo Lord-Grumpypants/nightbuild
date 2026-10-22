@@ -11,6 +11,10 @@ static_library("xxhash"):
         "-march=native",
     ]
 
+    if debug:
+        cflags += "-g"
+
+
     ldflags = [
         "-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
     ]
