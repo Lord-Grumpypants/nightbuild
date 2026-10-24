@@ -22,7 +22,7 @@ concurrency:
 jobs:
   verify:
     name: Verify release tag and CI
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     outputs:
@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Check out NightBuild
-        uses: useblacksmith/checkout@v1
+        uses: actions/checkout@v1
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
@@ -95,7 +95,7 @@ jobs:
   release:
     name: Build and publish release
     needs: verify
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
