@@ -17,6 +17,7 @@ Unlike Makefiles or CMake's configuration language, NightBuild manifests use a P
 - [Target Declarations](#target-declarations)
 - [Target Types](#target-types)
 - [Target Properties](#target-properties)
+- [Package Action](#package-action)
 - [Compiler Flags](#compiler-flags)
 - [Conditional Configuration](#conditional-configuration)
 - [Build Arguments](#build-arguments)
@@ -543,6 +544,30 @@ Specifies outputs for an action target.
     ]
 
 At least one output is required for an action target, unless the singular `output` property is supplied.
+
+### Package Action
+
+Specifies a command to run as a packaging step for a target. This is useful when an application needs additional assets bundled after its normal build steps.
+
+    app("NightNotes"):
+        sources = ["src/main.mm"]
+        package_action = ["npm", "run", "bundle"]
+
+The value is a list of strings containing the executable and its arguments. Keep the executable and each argument as separate list elements rather than combining them into a single command string.
+
+The optional `package_inputs` property lists additional files that affect
+the packaging step. NightBuild tracks these files when deciding whether
+packaging needs to run again.
+
+    app("NightNotes"):
+        sources = ["src/main.mm"]
+        package_action = ["npm", "run", "bundle"]
+        package_inputs = [
+            "web/editor.js",
+            "web/editor.css"
+        ]
+
+NightBuild reports this step as `PACKAGE` followed by the target name. The command is executed as part of building the target.
 
 ### Pre-Actions
 
@@ -1076,6 +1101,8 @@ This keeps shared configuration reusable while allowing build-specific settings 
 | `outputs` | String or list of strings | Action outputs |
 | `output` | String | Primary output |
 | `pre_actions` | List of lists of strings | Pre-action commands |
+| `package_action` | List of strings | Packaging command for a target |
+| `package_inputs` | String or list of strings | Additional packaging inputs |
 | `*_flags` | String or list of strings | Additional compiler flag groups |
 
 ### Operators

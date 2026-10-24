@@ -66,6 +66,12 @@ struct Target {
      */
     std::vector<std::string> action;
 
+    /**
+     * Optional post-link packaging command for app targets.
+     */
+    std::vector<std::string> package_action;
+    std::vector<std::string> package_inputs;
+
     std::vector<std::string> inputs;
 
     std::vector<std::string> outputs;

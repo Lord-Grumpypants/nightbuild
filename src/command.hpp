@@ -8,5 +8,6 @@ enum class CommandKind : std::uint32_t {
     Object,
     Link,
     Generator,
-    Action
+    Action,
+    Package
 };

@@ -372,6 +372,9 @@ std::string command_kind_name(CommandKind kind) {
 
     case CommandKind::Action:
         return "ACTION";
+
+    case CommandKind::Package:
+        return "PACKAGE";
     }
 
     return "UNKNOWN";
@@ -519,7 +522,9 @@ int run_process(
     else if (WIFSIGNALED(status))
         result = 128 + WTERMSIG(status);
 
-    if (!output.empty()) {
+    const bool live_status = isatty(STDOUT_FILENO);
+
+    if (!output.empty() && (result != 0 || read_failed || !live_status)) {
         std::cout << (result == 0 && !read_failed ? "F " : "E ")
                   << description << ":\n"
                   << output;
@@ -4309,6 +4314,34 @@ std::vector<BuildRecord> make_build_records(
     records.push_back(
         std::move(link));
 
+    if (type == OutputType::App &&
+        !target.package_action.empty()) {
+        BuildRecord package;
+        package.target = target.name;
+        package.kind = CommandKind::Package;
+        package.argv = target.package_action;
+        package.description = "PACKAGE " + target.name;
+        package.output = (
+            paths.build / "packages" /
+            (target.name + ".stamp")).string();
+
+        std::vector<fs::path> package_inputs;
+        for (const auto &input : target.package_inputs)
+            package_inputs.push_back(source_path(paths, input));
+
+        package_inputs.push_back(
+            app_executable_path(paths, target));
+
+        std::ostringstream serialized_inputs;
+        for (const auto &input : package_inputs)
+            serialized_inputs << input.string() << '\n';
+
+        package.source = serialized_inputs.str();
+        package.input_hash = make_input_hash(package_inputs);
+        package.state_hash = hash_for_arguments(package.argv);
+        records.push_back(std::move(package));
+    }
+
     if (type == OutputType::Generator) {
         BuildRecord generator;
         generator.target = target.name;
@@ -5162,6 +5195,168 @@ output_complete:
     return 0;
 }
 
+
+std::vector<fs::path> package_input_paths(
+    const std::string &serialized) {
+    std::vector<fs::path> result;
+    std::istringstream stream(serialized);
+    std::string line;
+
+    while (std::getline(stream, line)) {
+        if (!line.empty())
+            result.emplace_back(line);
+    }
+
+    return result;
+}
+
+bool package_needed(
+    const CommandDatabase &database,
+    const CommandRecord &command) {
+    if (static_cast<CommandKind>(command.kind) != CommandKind::Package)
+        fail("invalid package command");
+
+    if (!file_exists(fs::path(command_output(database, command))))
+        return true;
+
+    const auto inputs = package_input_paths(
+        database_string_copy(database, command.source_path_offset));
+
+    if (!command_hash_matches(
+            database,
+            command,
+            command.input_hash_index,
+            make_input_hash(inputs)))
+        return true;
+
+    const auto args = mapped_command_copy(database, command);
+
+    return !command_hash_matches(
+        database,
+        command,
+        command.state_hash_index,
+        hash_for_arguments(args));
+}
+
+int execute_package_command(
+    MutableCommandDatabase &database,
+    size_t index,
+    size_t progress,
+    size_t total,
+    bool verbose) {
+    if (index >= database.header->command_count)
+        fail("invalid package command index");
+
+    CommandRecord &command = database.commands[index];
+
+    if (static_cast<CommandKind>(command.kind) != CommandKind::Package)
+        fail("invalid package command");
+
+    const auto args = mutable_command_args(database, command);
+    const std::string description =
+        mutable_string(database, command.description_offset);
+
+    const bool live = !verbose && isatty(STDOUT_FILENO);
+
+    if (live) {
+        std::cout << "\r\033[KNightBuild · "
+                  << progress << "/" << total
+                  << " · packaging · " << description
+                  << std::flush;
+    } else {
+        std::cout << "[" << progress << "/" << total << "] "
+                  << description << "\n";
+    }
+
+    if (verbose)
+        std::cout << "  " << join_command(args) << "\n";
+
+    const int result = run_process(args, description);
+    if (result != 0) {
+        if (live)
+            std::cout << "\r\033[K" << std::flush;
+        return result;
+    }
+
+    const auto inputs = package_input_paths(
+        mutable_string(database, command.source_path_offset));
+
+    const std::string input_hash = make_input_hash(inputs);
+    const std::string state_hash = hash_for_arguments(args);
+    const fs::path stamp(
+        mutable_string(database, command.output_path_offset));
+
+    write_file(
+        stamp,
+        input_hash + "\n" + state_hash + "\n");
+
+    update_hash(database, command.input_hash_index, input_hash);
+    update_hash(database, command.state_hash_index, state_hash);
+
+    if (msync(database.mapping, database.size, MS_SYNC) != 0) {
+        std::perror("msync");
+        return 1;
+    }
+
+    if (live) {
+        std::cout << "\r\033[KNightBuild · "
+                  << progress << "/" << total
+                  << " · ✓ " << description << "\n";
+    }
+
+    return 0;
+}
+
+int execute_required_packages(
+    const BuildPaths &paths,
+    const std::unordered_set<size_t> &required_commands,
+    size_t &progress,
+    size_t total,
+    bool verbose,
+    bool &did_package) {
+    std::vector<size_t> indices(
+        required_commands.begin(), required_commands.end());
+    std::sort(indices.begin(), indices.end());
+
+    for (const size_t index : indices) {
+        CommandDatabase check = mmap_commands(paths.commands);
+
+        if (index >= check.header->command_count) {
+            check.close();
+            fail("invalid required package command index");
+        }
+
+        const CommandRecord command = check.commands[index];
+
+        if (static_cast<CommandKind>(command.kind) != CommandKind::Package) {
+            check.close();
+            continue;
+        }
+
+        const bool needed = package_needed(check, command);
+        check.close();
+
+        ++progress;
+        if (!needed)
+            continue;
+
+        MutableCommandDatabase writable =
+            mmap_commands_mutable(paths.commands);
+
+        const int result = execute_package_command(
+            writable, index, progress, total, verbose);
+
+        writable.close();
+
+        if (result != 0)
+            return result;
+
+        did_package = true;
+    }
+
+    return 0;
+}
+
 int compile_parallel_mapped(
     const BuildPaths &paths,
     MutableCommandDatabase &database,
@@ -5844,6 +6039,7 @@ int build(
     bool has_action = false;
     bool has_compile = false;
     bool has_link = false;
+    bool has_package = false;
 
     for (uint64_t i = 0;
          i < database.header->command_count;
@@ -5871,6 +6067,9 @@ int build(
 
         if (kind == CommandKind::Link)
             has_link = true;
+
+        if (kind == CommandKind::Package)
+            has_package = true;
     }
 
     /*
@@ -5987,15 +6186,30 @@ int build(
         ++link_count;
     }
 
+    size_t package_count = 0;
+
+    for (uint64_t i = 0;
+         i < writable.header->command_count;
+         ++i) {
+        if (!required_commands.contains(static_cast<size_t>(i)))
+            continue;
+
+        if (static_cast<CommandKind>(
+                writable.commands[i].kind) == CommandKind::Package)
+            ++package_count;
+    }
+
     size_t total_work =
         compile_indices.size() +
-        link_count;
+        link_count +
+        package_count;
 
     /*
      * Nothing to compile and nothing to link.
      */
     if (compile_indices.empty() &&
-        !has_link) {
+        !has_link &&
+        !has_package) {
 
         writable.close();
 
@@ -6011,7 +6225,7 @@ int build(
      * selected link commands directly.
      */
     if (compile_indices.empty() &&
-        has_link) {
+        (has_link || has_package)) {
 
         bool did_link = false;
         size_t link_progress = 0;
@@ -6111,9 +6325,20 @@ int build(
 
         writable.close();
 
-        if (!did_link)
-            std::cout
-                << "nightbuild: no work to do.\n";
+        bool did_package = false;
+        int package_result = execute_required_packages(
+            paths,
+            required_commands,
+            link_progress,
+            total_work,
+            verbose,
+            did_package);
+
+        if (package_result != 0)
+            return package_result;
+
+        if (!did_link && !did_package)
+            std::cout << "nightbuild: no work to do.\n";
 
         return 0;
     }
@@ -6140,7 +6365,8 @@ int build(
     writable.close();
 
     if (!has_compile &&
-        !has_link) {
+        !has_link &&
+        !has_package) {
 
         std::cout
             << "nightbuild: no work to do.\n";
@@ -6264,8 +6490,21 @@ int build(
     if (current.mapping != MAP_FAILED)
         current.close();
 
+    bool did_package = false;
+    int package_result = execute_required_packages(
+        paths,
+        required_commands,
+        link_progress,
+        total_work,
+        verbose,
+        did_package);
+
+    if (package_result != 0)
+        return package_result;
+
     if (!compile_indices.empty() ||
-        did_link) {
+        did_link ||
+        did_package) {
 
         return 0;
     }
@@ -6587,7 +6826,7 @@ int main(
             cli.verbose);
 
         if (result != 0)
-            std::cout << "Build failed\\n" << std::flush;
+            std::cout << "Build failed\n" << std::flush;
 
         return result;
     }
@@ -6598,7 +6837,7 @@ int main(
             cli.targets);
 
         if (result != 0)
-            std::cout << "Build failed\\n" << std::flush;
+            std::cout << "Build failed\n" << std::flush;
 
         return result;
     }

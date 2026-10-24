@@ -1010,6 +1010,16 @@ struct Parser {
             return;
         }
 
+        if (name == "package_action") {
+            assign_strings(target.package_action);
+            return;
+        }
+
+        if (name == "package_inputs") {
+            assign_strings(target.package_inputs);
+            return;
+        }
+
         if (name == "inputs") {
             assign_strings(target.inputs);
             return;
@@ -2412,6 +2422,25 @@ void validate_project(
 
         const bool is_action =
             target.type == "ACTION";
+
+        const bool has_package_action =
+            !target.package_action.empty();
+        const bool has_package_inputs =
+            !target.package_inputs.empty();
+
+        if ((has_package_action || has_package_inputs) &&
+            target.type != "app") {
+            throw std::runtime_error(
+                "target '" + name +
+                "' may use package_action and package_inputs "
+                "only with type 'app'");
+        }
+
+        if (has_package_inputs && !has_package_action) {
+            throw std::runtime_error(
+                "app target '" + name +
+                "' specifies package_inputs without package_action");
+        }
 
         if (target.type == "generator") {
             if (target.sources.empty()) {
