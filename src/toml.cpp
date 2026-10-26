@@ -2428,13 +2428,7 @@ void validate_project(
         const bool has_package_inputs =
             !target.package_inputs.empty();
 
-        if ((has_package_action || has_package_inputs) &&
-            target.type != "app") {
-            throw std::runtime_error(
-                "target '" + name +
-                "' may use package_action and package_inputs "
-                "only with type 'app'");
-        }
+        
 
         if (has_package_inputs && !has_package_action) {
             throw std::runtime_error(
