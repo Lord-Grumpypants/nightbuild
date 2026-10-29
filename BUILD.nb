@@ -24,11 +24,13 @@ executable("nightbuild"):
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
+        "src/remote/digest.cpp",
         "src/ui/license_window.mm",
     ]
 
     include_dirs = [
         "include",
+        "src/remote",
         "third_party/xxhash",
     ]
 
@@ -89,12 +91,14 @@ executable("nightbuild-pgo"):
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
+        "src/remote/digest.cpp",
         "src/ui/license_window.mm",
     ]
 
 
     include_dirs = [
         "include",
+        "src/remote",
         "third_party/xxhash",
     ]
 
@@ -150,11 +154,13 @@ executable("nightbuild-release"):
         "src/scheduler.cpp",
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
+        "src/remote/digest.cpp",
         "src/ui/license_window.mm",
     ]
 
     include_dirs = [
         "include",
+        "src/remote",
         "third_party/xxhash",
     ]
 
@@ -199,7 +205,9 @@ executable("test"):
     ]
     sources = [
         "tests/main.cpp",
+        "src/remote/digest.cpp",
     ]
+    include_dirs = ["src/remote"]
     cxxflags = [
         "-std=c++23",
         "-O3",
