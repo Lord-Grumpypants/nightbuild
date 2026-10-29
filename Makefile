@@ -18,7 +18,8 @@ CXX_SOURCES := \
 	src/toml.cpp \
 	src/scheduler.cpp \
 	src/fsevents.cpp \
-	src/compile_commands.cpp
+	src/compile_commands.cpp \
+	src/remote/digest.cpp
 
 OBJCXX_SOURCES := \
 	src/ui/license_window.mm
