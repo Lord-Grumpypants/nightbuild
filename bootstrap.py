@@ -159,12 +159,7 @@ def main():
         cwd=ROOT,
     )
 
-    run(
-        "mv",
-        "third_party/xxhash-BUILD.nb",
-        "third_party/xxhash/BUILD.nb",
-        cwd=ROOT,
-    )
+    
     
     run(
         "make",
