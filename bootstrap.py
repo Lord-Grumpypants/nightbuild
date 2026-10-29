@@ -73,6 +73,7 @@ def install_packages(brew):
         "lld",
         "python@3.14",
         "git",
+        "grpc",
     ]
 
     missing = [
