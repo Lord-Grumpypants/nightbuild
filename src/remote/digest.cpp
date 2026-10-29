@@ -5,6 +5,7 @@
 #include <array>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace nightbuild::remote {
 
