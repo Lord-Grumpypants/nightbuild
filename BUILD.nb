@@ -222,7 +222,6 @@ executable("remote-capabilities"):
     sources = [
         "src/remote/capabilities_main.cpp",
         "src/remote/client.cpp",
-        "src/remote/generated/reapi_generated.cpp",
     ]
     include_dirs = [
         "src/remote",
