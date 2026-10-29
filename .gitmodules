@@ -1,3 +1,9 @@
 [submodule "third_party/xxhash"]
 	path = third_party/xxhash
 	url = https://github.com/Cyan4973/xxHash.git
+[submodule "third_party/remote-apis"]
+	path = third_party/remote-apis
+	url = https://github.com/bazelbuild/remote-apis.git
+[submodule "third_party/googleapis"]
+	path = third_party/googleapis
+	url = https://github.com/googleapis/googleapis.git

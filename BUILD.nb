@@ -95,7 +95,6 @@ executable("nightbuild-pgo"):
         "src/ui/license_window.mm",
     ]
 
-
     include_dirs = [
         "include",
         "src/remote",
@@ -215,3 +214,29 @@ executable("test"):
 
     if debug:
         cxxflags += "-g"
+
+executable("remote-capabilities"):
+    toolchain_include = [
+        "toolchains/CXX.json",
+    ]
+    sources = [
+        "src/remote/capabilities_main.cpp",
+        "src/remote/client.cpp",
+        "src/remote/generated/reapi_generated.cpp",
+    ]
+    include_dirs = [
+        "src/remote",
+        "src/remote/generated",
+        "build/reapi/install/include",
+    ]
+    cxxflags = [
+        "-std=c++23",
+        "-O3",
+    ]
+    library_dirs = ["build/reapi/lib"]
+    libraries = ["nightbuild_reapi"]
+    frameworks = [
+        "Security",
+        "CoreFoundation",
+        "SystemConfiguration",
+    ]

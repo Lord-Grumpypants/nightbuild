@@ -73,7 +73,7 @@ def install_packages(brew):
         "lld",
         "python@3.14",
         "git",
-        "grpc",
+        "cmake",
     ]
 
     missing = [
@@ -160,11 +160,17 @@ def main():
         cwd=ROOT,
     )
 
-    
-    
+    run(
+        sys.executable,
+        str(ROOT / "scripts" / "build_reapi.py"),
+        cwd=ROOT,
+        env=env,
+    )
+
     run(
         "make",
         cwd=ROOT,
+        env=env,
     )
 
     nightbuild = ROOT / "nightbuild"
@@ -229,6 +235,17 @@ def main():
         "-C",
         str(OFFICIAL_BUILD_DIR),
         "nightbuild",
+        "--no-license",
+        cwd=ROOT,
+        env=env,
+    )
+
+    run(
+        str(nightbuild),
+        "build",
+        "-C",
+        str(OFFICIAL_BUILD_DIR),
+        "remote-capabilities",
         "--no-license",
         cwd=ROOT,
         env=env,
