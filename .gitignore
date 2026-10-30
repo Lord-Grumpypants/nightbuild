@@ -1,6 +1,9 @@
 .vscode/
 
 build/
+
+# Ephemeral vendored gRPC checkout and its configured CMake build.
+third_party/grpc-work/
 out/
 samu-build/obj/
 samu-build/nightbuild
