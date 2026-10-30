@@ -7539,6 +7539,7 @@ static_library("grpc"):
         "build/reapi/grpc/third_party/abseil-cpp",
         "build/reapi/grpc/third_party/cares/cares",
         "build/reapi/grpc/third_party/cares/cares/include",
+        "build/reapi/grpc/third_party/cares",
     ]
     cflags = [
         "-O3",
