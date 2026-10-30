@@ -7,6 +7,7 @@ default = [
 
 import "third_party/BUILD.nb"
 import "third_party/grpc.BUILD.nb"
+import "third_party/reapi.generated.BUILD.nb"
 
 declare_args("debug"):
     default = false
@@ -227,14 +228,14 @@ executable("remote-capabilities"):
     include_dirs = [
         "src/remote",
         "src/remote/generated",
-        "build/reapi/install/include",
+        "/opt/homebrew/include",
     ]
     cxxflags = [
         "-std=c++23",
         "-O3",
     ]
-    library_dirs = ["build/reapi/lib"]
-    libraries = ["nightbuild_reapi"]
+    library_dirs = ["/opt/homebrew/lib"]
+    deps = ["grpc", "nightbuild_reapi"]
     frameworks = [
         "Security",
         "CoreFoundation",
