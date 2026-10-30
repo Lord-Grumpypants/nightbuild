@@ -1038,6 +1038,7 @@ static_library("grpc"):
     ]
 
     include_dirs = [
+        "third_party/xxhash",
         "/opt/homebrew/include",
         "build/reapi/grpc",
         "build/reapi/grpc/include",
