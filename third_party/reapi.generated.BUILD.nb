@@ -36,10 +36,10 @@ static_library("nightbuild_reapi"):
     ]
     include_dirs = [
         "src/remote/generated",
-        "build/reapi/grpc/include",
-        "build/reapi/grpc/third_party/protobuf/src",
-        "build/reapi/grpc/third_party/abseil-cpp",
-        "build/reapi/grpc/third_party/utf8_range",
+        "third_party/grpc-work/grpc/include",
+        "third_party/grpc-work/grpc/third_party/protobuf/src",
+        "third_party/grpc-work/grpc/third_party/abseil-cpp",
+        "third_party/grpc-work/grpc/third_party/utf8_range",
     ]
     cxxflags = ["-std=c++17", "-O2", "-fPIC"]
     deps = ["grpc"]
