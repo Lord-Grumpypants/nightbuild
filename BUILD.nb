@@ -230,14 +230,12 @@ executable("remote-capabilities"):
         "src/remote/generated",
         "build/reapi/grpc/include",
         "build/reapi/grpc",
-        "/opt/homebrew/include",
     ]
     cxxflags = [
         "-std=c++23",
         "-O3",
     ]
-    library_dirs = ["/opt/homebrew/lib"]
-    deps = ["nightbuild_reapi", "grpc"]
+    deps = ["nightbuild_reapi", "grpc++"]
     frameworks = [
         "Security",
         "CoreFoundation",
