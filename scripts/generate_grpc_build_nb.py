@@ -186,6 +186,11 @@ def generate(data: dict[str, Any]) -> str:
             fail(f"static library {name} has no compilable sources")
 
         cflags, cxxflags, includes = compile_settings(target, source_root, build_root)
+        if name == "grpc":
+            # c-ares ares.h includes ares_build.h from its source-root directory.
+            cares_root = (REPO_GRPC_ROOT / "third_party/cares").as_posix()
+            if cares_root not in includes:
+                includes.append(cares_root)
         deps: list[str] = []
         for dependency in target.get("dependencies", []):
             dep_name = dependency.get("name")
