@@ -11,7 +11,9 @@ SOURCE = WORK / "grpc"
 GENERATED = ROOT / "src" / "remote" / "generated"
 FRAGMENT = ROOT / "third_party" / "reapi.generated.BUILD.nb"
 GRPC_TAG = "v1.85.0"
-BREW = Path("/opt/homebrew")
+PROTOC = WORK / "grpc-build" / "third_party" / "protobuf" / "protoc"
+PLUGIN = WORK / "grpc-build" / "grpc_cpp_plugin"
+PROTOBUF_INCLUDE = SOURCE / "third_party" / "protobuf" / "src"
 
 
 def run(*args):
@@ -32,7 +34,10 @@ def write_manifest(sources):
         "    ]",
         "    include_dirs = [",
         '        "src/remote/generated",',
-        '        "/opt/homebrew/include",',
+        '        "build/reapi/grpc/include",',
+        '        "build/reapi/grpc/third_party/protobuf/src",',
+        '        "build/reapi/grpc/third_party/abseil-cpp",',
+        '        "build/reapi/grpc/third_party/utf8_range",',
         "    ]",
         '    cxxflags = ["-std=c++17", "-O2", "-fPIC"]',
         '    deps = ["grpc"]',
@@ -50,17 +55,25 @@ def main():
             "https://github.com/grpc/grpc.git", str(SOURCE),
         )
 
-    protoc = BREW / "opt" / "protobuf" / "bin" / "protoc"
-    plugin = BREW / "opt" / "grpc" / "bin" / "grpc_cpp_plugin"
-    if not protoc.is_file() or not plugin.is_file():
-        raise SystemExit("error: install host generators with: brew install protobuf grpc")
+    for tool in (PROTOC, PLUGIN):
+        if not tool.is_file() or not tool.stat().st_mode & 0o111:
+            raise SystemExit(f"error: missing executable: {tool}")
+
+    if not PROTOBUF_INCLUDE.is_dir():
+        raise SystemExit(f"error: missing vendored Protobuf includes: {PROTOBUF_INCLUDE}")
+
+    version = subprocess.check_output(
+        [str(PROTOC), "--version"], text=True
+    ).strip()
+    if version != "libprotoc 35.1":
+        raise SystemExit(f"error: expected vendored protoc 35.1, got {version}")
 
     if GENERATED.exists():
         shutil.rmtree(GENERATED)
 
     run(
         sys.executable, str(ROOT / "scripts" / "generate_reapi.py"),
-        str(protoc), str(plugin), str(BREW / "include"),
+        str(PROTOC), str(PLUGIN), str(PROTOBUF_INCLUDE),
     )
 
     sources = sorted(

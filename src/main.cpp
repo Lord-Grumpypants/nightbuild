@@ -3937,7 +3937,9 @@ std::vector<BuildRecord> make_build_records(
     const toml::Target &target,
     const PkgConfigFlags &pkg,
     const std::string &manifest_hash,
-    const std::vector<Toolchain> &toolchains, const std::vector<const toml::Target *> &dependencies) {
+    const std::vector<Toolchain> &toolchains,
+    const std::vector<const toml::Target *> &dependencies,
+    const toml::Project &project) {
 
     (void)manifest_hash;
 
@@ -4144,6 +4146,142 @@ std::vector<BuildRecord> make_build_records(
             std::move(record));
     }
 
+    // Aggregate link requirements from the complete dependency graph.
+    toml::Target link_target = target;
+
+    auto append_unique = [](std::vector<std::string> &destination,
+                            const std::vector<std::string> &source) {
+        for (const auto &value : source) {
+            if (std::find(
+                    destination.begin(),
+                    destination.end(),
+                    value) == destination.end()) {
+                destination.push_back(value);
+            }
+        }
+    };
+
+    std::unordered_set<std::string> visited_link_dependencies;
+
+    std::function<void(const toml::Target &)> collect_link_requirements;
+    collect_link_requirements =
+        [&](const toml::Target &dependency) {
+            if (dependency.type == "generator")
+                return;
+
+            if (!visited_link_dependencies.insert(
+                    dependency.name).second) {
+                return;
+            }
+
+            append_unique(link_target.library_dirs, dependency.library_dirs);
+            append_unique(link_target.ldflags, dependency.ldflags);
+            append_unique(link_target.libraries, dependency.libraries);
+            append_unique(link_target.frameworks, dependency.frameworks);
+
+            for (const auto &child_name : dependency.dependencies) {
+                auto child = project.targets.find(child_name);
+
+                if (child == project.targets.end()) {
+                    fail(
+                        "target '" + dependency.name +
+                        "' depends on unknown target '" +
+                        child_name + "'");
+                }
+
+                collect_link_requirements(child->second);
+            }
+        };
+
+    for (const auto &dependency_name : target.dependencies) {
+        auto dependency = project.targets.find(dependency_name);
+
+        if (dependency == project.targets.end()) {
+            fail(
+                "target '" + target.name +
+                "' depends on unknown target '" +
+                dependency_name + "'");
+        }
+
+        collect_link_requirements(dependency->second);
+    }
+
+    if (target.name == "remote-capabilities") {
+        auto print_metadata = [](const char *label, const toml::Target &item) {
+            std::cerr
+                << "[link-debug] " << label
+                << " name=" << item.name
+                << " type=" << item.type
+                << " deps=" << item.dependencies.size()
+                << " library_dirs=" << item.library_dirs.size()
+                << " ldflags=" << item.ldflags.size()
+                << " libraries=" << item.libraries.size()
+                << " frameworks=" << item.frameworks.size()
+                << '\\n';
+
+            for (const auto &value : item.library_dirs)
+                std::cerr << "[link-debug]   library_dir: " << value << '\\n';
+            for (const auto &value : item.ldflags)
+                std::cerr << "[link-debug]   ldflag: " << value << '\\n';
+            for (const auto &value : item.libraries)
+                std::cerr << "[link-debug]   library: " << value << '\\n';
+            for (const auto &value : item.frameworks)
+                std::cerr << "[link-debug]   framework: " << value << '\\n';
+        };
+
+        print_metadata("target", target);
+
+        for (const auto &name : target.dependencies) {
+            auto it = project.targets.find(name);
+            if (it == project.targets.end()) {
+                std::cerr << "[link-debug] missing direct dependency: "
+                          << name << '\\n';
+            } else {
+                print_metadata("direct dependency", it->second);
+            }
+        }
+
+        print_metadata("aggregated", link_target);
+    }
+
+    if (target.name == "remote-capabilities") {
+        auto print_metadata = [](const char *label, const toml::Target &item) {
+            std::cerr
+                << "[link-debug] " << label
+                << " name=" << item.name
+                << " type=" << item.type
+                << " deps=" << item.dependencies.size()
+                << " library_dirs=" << item.library_dirs.size()
+                << " ldflags=" << item.ldflags.size()
+                << " libraries=" << item.libraries.size()
+                << " frameworks=" << item.frameworks.size()
+                << '\\n';
+
+            for (const auto &value : item.library_dirs)
+                std::cerr << "[link-debug]   library_dir: " << value << '\\n';
+            for (const auto &value : item.ldflags)
+                std::cerr << "[link-debug]   ldflag: " << value << '\\n';
+            for (const auto &value : item.libraries)
+                std::cerr << "[link-debug]   library: " << value << '\\n';
+            for (const auto &value : item.frameworks)
+                std::cerr << "[link-debug]   framework: " << value << '\\n';
+        };
+
+        print_metadata("target", target);
+
+        for (const auto &name : target.dependencies) {
+            auto it = project.targets.find(name);
+            if (it == project.targets.end()) {
+                std::cerr << "[link-debug] missing direct dependency: "
+                          << name << '\\n';
+            } else {
+                print_metadata("direct dependency", it->second);
+            }
+        }
+
+        print_metadata("aggregated", link_target);
+    }
+
     std::vector<fs::path> objects =
         target_objects(
             paths,
@@ -4174,7 +4312,7 @@ std::vector<BuildRecord> make_build_records(
         link.argv =
             generator_link_command(
                 paths,
-                target,
+                link_target,
                 link_inputs,
                 pkg);
         link.description =
@@ -4193,7 +4331,7 @@ std::vector<BuildRecord> make_build_records(
         link.argv =
             executable_link_command(
                 paths,
-                target,
+                link_target,
                 link_inputs,
                 pkg);
 
@@ -4216,7 +4354,7 @@ std::vector<BuildRecord> make_build_records(
         link.argv =
             app_link_command(
                 paths,
-                target,
+                link_target,
                 link_inputs,
                 pkg);
 
@@ -4239,7 +4377,7 @@ std::vector<BuildRecord> make_build_records(
             static_library_command(
                 paths,
                 target,
-                link_inputs);
+                objects);
 
         link.description =
             "AR " +
@@ -4260,7 +4398,7 @@ std::vector<BuildRecord> make_build_records(
         link.argv =
             shared_library_command(
                 paths,
-                target,
+                link_target,
                 link_inputs,
                 pkg);
 
@@ -4283,7 +4421,7 @@ std::vector<BuildRecord> make_build_records(
         link.argv =
             framework_command(
                 paths,
-                target,
+                link_target,
                 link_inputs,
                 pkg);
 
@@ -4557,7 +4695,8 @@ void generate(
                 pkg,
                 target_hash,
                 toolchains,
-                dependencies);
+                dependencies,
+                project);
 
         all_records.insert(
             all_records.end(),
