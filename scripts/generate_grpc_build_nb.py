@@ -16,7 +16,8 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-REPO_GRPC_ROOT = PurePosixPath("build/reapi/grpc")
+REPO_GRPC_ROOT = PurePosixPath("third_party/grpc-work/grpc")
+REPO_GRPC_BUILD_ROOT = PurePosixPath("third_party/grpc-work/grpc-build")
 COMPILE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx"}
 
 
@@ -54,10 +55,13 @@ def normalize_path(
         value = (build_root if generated else source_root) / value
     value = value.resolve(strict=False)
 
-    for root in (source_root, build_root):
+    for root, repo_root in (
+        (source_root, REPO_GRPC_ROOT),
+        (build_root, REPO_GRPC_BUILD_ROOT),
+    ):
         try:
             relative = value.relative_to(root)
-            return (REPO_GRPC_ROOT / PurePosixPath(relative.as_posix())).as_posix()
+            return (repo_root / PurePosixPath(relative.as_posix())).as_posix()
         except ValueError:
             continue
     return value.as_posix()
