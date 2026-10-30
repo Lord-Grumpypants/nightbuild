@@ -75,7 +75,6 @@ def export_configuration(
 ) -> dict[str, Any]:
     entries = configuration.get("targets", [])
     targets_by_id: dict[str, dict[str, Any]] = {}
-    target_json_paths: dict[str, str] = {}
 
     for entry in entries:
         json_file = entry.get("jsonFile")
@@ -92,7 +91,6 @@ def export_configuration(
             raise RuntimeError(f"target response {target_path} has no id")
 
         targets_by_id[target_id] = target_record(target, json_file)
-        target_json_paths[target_id] = json_file
 
     ids_by_name: dict[str, str] = {}
     for target_id, target in targets_by_id.items():
