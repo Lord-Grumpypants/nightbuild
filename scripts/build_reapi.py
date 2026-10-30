@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare official REAPI protobuf sources for NightBuild's native target graph."""
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -54,12 +55,18 @@ def main():
     if not protoc.is_file() or not plugin.is_file():
         raise SystemExit("error: install host generators with: brew install protobuf grpc")
 
+    if GENERATED.exists():
+        shutil.rmtree(GENERATED)
+
     run(
         sys.executable, str(ROOT / "scripts" / "generate_reapi.py"),
         str(protoc), str(plugin), str(BREW / "include"),
     )
 
-    sources = sorted(GENERATED.rglob("*.pb.cc"))
+    sources = sorted(
+        path for path in GENERATED.rglob("*.pb.cc")
+        if not path.name.endswith(".grpc.pb.cc")
+    )
     sources += sorted(GENERATED.rglob("*.grpc.pb.cc"))
     if not sources:
         raise SystemExit("error: protoc generated no REAPI C++ sources")
