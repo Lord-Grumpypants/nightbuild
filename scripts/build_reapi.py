@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = ROOT / "build" / "reapi"
+WORK = ROOT / "third_party" / "grpc-work"
 SOURCE = WORK / "grpc"
 GENERATED = ROOT / "src" / "remote" / "generated"
 FRAGMENT = ROOT / "third_party" / "reapi.generated.BUILD.nb"
