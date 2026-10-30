@@ -73,7 +73,8 @@ def install_packages(brew):
         "lld",
         "python@3.14",
         "git",
-        "cmake",
+        "grpc",
+        "protobuf",
     ]
 
     missing = [
@@ -161,19 +162,19 @@ def main():
     )
 
     run(
-        sys.executable,
-        str(ROOT / "scripts" / "build_reapi.py"),
-        cwd=ROOT,
-        env=env,
-    )
-
-    run(
         "make",
         cwd=ROOT,
         env=env,
     )
 
     nightbuild = ROOT / "nightbuild"
+
+    run(
+        sys.executable,
+        str(ROOT / "scripts" / "build_reapi.py"),
+        cwd=ROOT,
+        env=env,
+    )
 
     if not nightbuild.exists():
         raise SystemExit(
