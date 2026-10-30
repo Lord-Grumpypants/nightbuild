@@ -6,6 +6,7 @@ default = [
 ]
 
 import "third_party/BUILD.nb"
+import "third_party/grpc.BUILD.nb"
 
 declare_args("debug"):
     default = false
