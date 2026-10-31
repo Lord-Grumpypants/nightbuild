@@ -5,7 +5,6 @@ from pathlib import Path
 import os
 import shutil
 import subprocess
-import sys
 
 
 ROOT = Path(__file__).resolve().parent
@@ -24,8 +23,6 @@ LLD_BIN = LLD_PREFIX / "bin"
 
 GRPC_WORK = ROOT / "third_party" / "grpc-work"
 GRPC_SOURCE = GRPC_WORK / "grpc"
-GRPC_BUILD = GRPC_WORK / "grpc-build"
-GRPC_INSTALL = GRPC_WORK / "install"
 GRPC_TAG = "v1.85.0"
 
 
@@ -79,7 +76,6 @@ def install_packages(brew):
         "lld",
         "python@3.14",
         "git",
-        "cmake",
     ]
 
     missing = [
@@ -139,100 +135,36 @@ def ensure_grpc_source():
         )
 
 
-def build_grpc_codegen(env):
-    cmake = shutil.which("cmake", path=env["PATH"])
-    if cmake is None:
-        raise SystemExit("error: CMake was not found after Homebrew installation")
+def verify_generated_reapi():
+    generated = ROOT / "src" / "remote" / "generated"
+    manifest = ROOT / "third_party" / "reapi.generated.BUILD.nb"
 
-    # Request the codemodel before configuring so the target graph can be
-    # exported directly from this exact configuration.
-    query_dir = GRPC_BUILD / ".cmake" / "api" / "v1" / "query"
-    query_dir.mkdir(parents=True, exist_ok=True)
-    (query_dir / "codemodel-v2").touch()
+    required = [
+        generated / "build/bazel/remote/execution/v2/remote_execution.pb.cc",
+        generated / "build/bazel/remote/execution/v2/remote_execution.pb.h",
+        generated / "build/bazel/remote/execution/v2/remote_execution.grpc.pb.cc",
+        generated / "build/bazel/remote/execution/v2/remote_execution.grpc.pb.h",
+        generated / "build/bazel/semver/semver.pb.cc",
+        generated / "build/bazel/semver/semver.pb.h",
+        generated / "build/bazel/semver/semver.grpc.pb.cc",
+        generated / "build/bazel/semver/semver.grpc.pb.h",
+        manifest,
+    ]
 
-    run(
-        cmake,
-        "-S",
-        str(GRPC_SOURCE),
-        "-B",
-        str(GRPC_BUILD),
-        "-G",
-        "Unix Makefiles",
-        "-DCMAKE_BUILD_TYPE=Release",
-        f"-DCMAKE_C_COMPILER={LLVM_BIN / 'clang'}",
-        f"-DCMAKE_CXX_COMPILER={LLVM_BIN / 'clang++'}",
-        f"-DCMAKE_INSTALL_PREFIX={GRPC_INSTALL}",
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DgRPC_BUILD_TESTS=OFF",
-        "-DgRPC_INSTALL=ON",
-        "-DgRPC_BUILD_CODEGEN=ON",
-        "-DgRPC_BUILD_GRPC_CPP_PLUGIN=ON",
-        "-DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF",
-        "-DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF",
-        "-DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF",
-        "-DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF",
-        "-DgRPC_BUILD_GRPC_PYTHON_PLUGIN=OFF",
-        "-DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF",
-        "-DgRPC_BUILD_GRPC_OTEL_PLUGIN=OFF",
-        "-DgRPC_ABSL_PROVIDER=module",
-        "-DgRPC_CARES_PROVIDER=module",
-        "-DgRPC_PROTOBUF_PROVIDER=module",
-        "-DgRPC_RE2_PROVIDER=module",
-        "-DgRPC_SSL_PROVIDER=module",
-        "-DgRPC_ZLIB_PROVIDER=module",
-        "-Dprotobuf_BUILD_PROTOC_BINARIES=ON",
-        "-Dprotobuf_BUILD_PROTOBUF_BINARIES=ON",
-        "-Dprotobuf_BUILD_LIBPROTOC=OFF",
-        "-Dprotobuf_BUILD_TESTS=OFF",
-        "-DABSL_BUILD_TESTING=OFF",
-        "-DABSL_BUILD_TEST_HELPERS=OFF",
-        "-DRE2_BUILD_TESTING=OFF",
-        "-DZLIB_BUILD_EXAMPLES=OFF",
-        cwd=ROOT,
-        env=env,
-    )
+    missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
+    if missing:
+        raise SystemExit(
+            "error: committed REAPI generated files are missing:\n"
+            + "\n".join(f"  {path}" for path in missing)
+        )
 
-    run(
-        cmake,
-        "--build",
-        str(GRPC_BUILD),
-        "--config",
-        "Release",
-        "--target",
-        "protoc",
-        "grpc_cpp_plugin",
-        "--parallel",
-        cwd=ROOT,
-        env=env,
-    )
+    sources = list(generated.rglob("*.pb.cc"))
+    if len(sources) != 30:
+        raise SystemExit(
+            f"error: expected 30 generated REAPI translation units, found {len(sources)}"
+        )
 
-    inventory = GRPC_BUILD / "nightbuild-cmake-inventory.json"
-
-    run(
-        sys.executable,
-        str(ROOT / "scripts" / "export_cmake_file_api.py"),
-        "--reply-dir",
-        str(GRPC_BUILD / ".cmake" / "api" / "v1" / "reply"),
-        "--output",
-        str(inventory),
-        "--configuration",
-        "Release",
-        "--root",
-        "grpc++",
-        cwd=ROOT,
-        env=env,
-    )
-
-    run(
-        sys.executable,
-        str(ROOT / "scripts" / "generate_grpc_build_nb.py"),
-        str(inventory),
-        "--output",
-        str(ROOT / "third_party" / "grpc.BUILD.nb"),
-        "--no-backup",
-        cwd=ROOT,
-        env=env,
-    )
+    print("Bootstrap · verified 30 committed REAPI translation units")
 
 
 def main():
@@ -275,14 +207,7 @@ def main():
         raise SystemExit(f"error: {nightbuild} was not produced by make")
 
     ensure_grpc_source()
-    build_grpc_codegen(env)
-
-    run(
-        sys.executable,
-        str(ROOT / "scripts" / "build_reapi.py"),
-        cwd=ROOT,
-        env=env,
-    )
+    verify_generated_reapi()
 
     run(
         str(nightbuild),
