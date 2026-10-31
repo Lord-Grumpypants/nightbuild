@@ -135,6 +135,39 @@ def ensure_grpc_source():
         )
 
 
+def install_cares_config():
+    source = ROOT / "third_party" / "config" / "macos" / "ares_config.h"
+    destination = (
+        GRPC_WORK
+        / "grpc-build"
+        / "third_party"
+        / "cares"
+        / "cares"
+        / "ares_config.h"
+    )
+
+    if not source.is_file():
+        raise SystemExit(
+            f"error: committed macOS c-ares configuration is missing: {source}"
+        )
+
+    data = source.read_bytes()
+    if not data or b"CARES_RANDOM_FILE" not in data:
+        raise SystemExit(
+            f"error: invalid macOS c-ares configuration: {source}"
+        )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+    if not destination.is_file():
+        raise SystemExit(
+            f"error: failed to install c-ares configuration: {destination}"
+        )
+
+    print("Bootstrap · installed macOS c-ares configuration")
+
+
 def verify_generated_reapi():
     generated = ROOT / "src" / "remote" / "generated"
     manifest = ROOT / "third_party" / "reapi.generated.BUILD.nb"
@@ -207,6 +240,7 @@ def main():
         raise SystemExit(f"error: {nightbuild} was not produced by make")
 
     ensure_grpc_source()
+    install_cares_config()
     verify_generated_reapi()
 
     run(
