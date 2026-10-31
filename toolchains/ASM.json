@@ -1,0 +1,12 @@
+{
+  "name": "Homebrew LLVM ASM",
+  "extension": ".s",
+  "compiler": "/opt/homebrew/opt/llvm/bin/clang",
+  "flags_key": "asmflags",
+  "dependency_flags": [
+    "-MMD",
+    "-MP"
+  ],
+  "description": "ASM",
+  "output_extension": ".o"
+}

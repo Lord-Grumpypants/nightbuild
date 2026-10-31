@@ -4217,16 +4217,16 @@ std::vector<BuildRecord> make_build_records(
                 << " ldflags=" << item.ldflags.size()
                 << " libraries=" << item.libraries.size()
                 << " frameworks=" << item.frameworks.size()
-                << '\\n';
+                << '\n';
 
             for (const auto &value : item.library_dirs)
-                std::cerr << "[link-debug]   library_dir: " << value << '\\n';
+                std::cerr << "[link-debug]   library_dir: " << value << '\n';
             for (const auto &value : item.ldflags)
-                std::cerr << "[link-debug]   ldflag: " << value << '\\n';
+                std::cerr << "[link-debug]   ldflag: " << value << '\n';
             for (const auto &value : item.libraries)
-                std::cerr << "[link-debug]   library: " << value << '\\n';
+                std::cerr << "[link-debug]   library: " << value << '\n';
             for (const auto &value : item.frameworks)
-                std::cerr << "[link-debug]   framework: " << value << '\\n';
+                std::cerr << "[link-debug]   framework: " << value << '\n';
         };
 
         print_metadata("target", target);
@@ -4235,7 +4235,7 @@ std::vector<BuildRecord> make_build_records(
             auto it = project.targets.find(name);
             if (it == project.targets.end()) {
                 std::cerr << "[link-debug] missing direct dependency: "
-                          << name << '\\n';
+                          << name << '\n';
             } else {
                 print_metadata("direct dependency", it->second);
             }
@@ -4255,16 +4255,16 @@ std::vector<BuildRecord> make_build_records(
                 << " ldflags=" << item.ldflags.size()
                 << " libraries=" << item.libraries.size()
                 << " frameworks=" << item.frameworks.size()
-                << '\\n';
+                << '\n';
 
             for (const auto &value : item.library_dirs)
-                std::cerr << "[link-debug]   library_dir: " << value << '\\n';
+                std::cerr << "[link-debug]   library_dir: " << value << '\n';
             for (const auto &value : item.ldflags)
-                std::cerr << "[link-debug]   ldflag: " << value << '\\n';
+                std::cerr << "[link-debug]   ldflag: " << value << '\n';
             for (const auto &value : item.libraries)
-                std::cerr << "[link-debug]   library: " << value << '\\n';
+                std::cerr << "[link-debug]   library: " << value << '\n';
             for (const auto &value : item.frameworks)
-                std::cerr << "[link-debug]   framework: " << value << '\\n';
+                std::cerr << "[link-debug]   framework: " << value << '\n';
         };
 
         print_metadata("target", target);
@@ -4273,7 +4273,7 @@ std::vector<BuildRecord> make_build_records(
             auto it = project.targets.find(name);
             if (it == project.targets.end()) {
                 std::cerr << "[link-debug] missing direct dependency: "
-                          << name << '\\n';
+                          << name << '\n';
             } else {
                 print_metadata("direct dependency", it->second);
             }
@@ -4288,19 +4288,33 @@ std::vector<BuildRecord> make_build_records(
             target,
             toolchains);
 
-    std::vector<fs::path> link_inputs =
-        objects;
+    std::vector<fs::path> link_inputs = objects;
 
-    for (const toml::Target *dependency :
-         dependencies) {
-        if (dependency->type == "generator")
-            continue;
+    std::unordered_set<std::string> visited_link_inputs;
 
+    std::function<void(const toml::Target &)> append_link_inputs;
+    append_link_inputs = [&](const toml::Target &dependency) {
+        if (dependency.type == "generator")
+            return;
+
+        if (!visited_link_inputs.insert(dependency.name).second)
+            return;
 
         link_inputs.push_back(
-            paths.root /
-            dependency->output);
-    }
+            paths.root / dependency.output);
+
+        for (const auto &child_name : dependency.dependencies) {
+            auto child = project.targets.find(child_name);
+
+            if (child == project.targets.end())
+                fail("Unknown link dependency: " + child_name);
+
+            append_link_inputs(child->second);
+        }
+    };
+
+    for (const toml::Target *dependency : dependencies)
+        append_link_inputs(*dependency);
 
     BuildRecord link;
     link.target = target.name;
