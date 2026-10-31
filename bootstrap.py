@@ -136,37 +136,43 @@ def ensure_grpc_source():
 
 
 def install_cares_config():
-    source = ROOT / "third_party" / "config" / "macos" / "ares_config.h"
-    destination = (
+    config_dir = ROOT / "third_party" / "config" / "macos"
+    destination_dir = (
         GRPC_WORK
         / "grpc-build"
         / "third_party"
         / "cares"
         / "cares"
-        / "ares_config.h"
     )
 
-    if not source.is_file():
-        raise SystemExit(
-            f"error: committed macOS c-ares configuration is missing: {source}"
-        )
+    headers = {
+        "ares_config.h": b"CARES_RANDOM_FILE",
+        "ares_build.h": b"__CARES_BUILD_H",
+    }
 
-    data = source.read_bytes()
-    if not data or b"CARES_RANDOM_FILE" not in data:
-        raise SystemExit(
-            f"error: invalid macOS c-ares configuration: {source}"
-        )
+    for filename, marker in headers.items():
+        source = config_dir / filename
+        if not source.is_file():
+            raise SystemExit(
+                f"error: committed macOS c-ares header is missing: {source}"
+            )
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
+        data = source.read_bytes()
+        if not data or marker not in data:
+            raise SystemExit(
+                f"error: invalid macOS c-ares header: {source}"
+            )
 
-    if not destination.is_file():
-        raise SystemExit(
-            f"error: failed to install c-ares configuration: {destination}"
-        )
+        destination = destination_dir / filename
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
 
-    print("Bootstrap · installed macOS c-ares configuration")
+        if not destination.is_file() or destination.read_bytes() != data:
+            raise SystemExit(
+                f"error: failed to install c-ares header: {destination}"
+            )
 
+    print("Bootstrap · installed macOS c-ares configuration headers")
 
 def verify_generated_reapi():
     generated = ROOT / "src" / "remote" / "generated"
