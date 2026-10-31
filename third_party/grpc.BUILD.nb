@@ -3859,6 +3859,8 @@ static_library("grpc"):
         "-fPIC",
     ]
     deps = [
+        "address_sorting",
+        "gpr",
         "upb_base_lib",
         "upb_descriptor_lib",
         "upb_hash_lib",
@@ -3953,8 +3955,6 @@ static_library("grpc"):
         "crypto",
         "ssl",
         "zlibstatic",
-        "address_sorting",
-        "gpr",
     ]
 
 static_library("grpc++"):
@@ -4047,6 +4047,8 @@ static_library("grpc++"):
         "-fPIC",
     ]
     deps = [
+        "address_sorting",
+        "gpr",
         "grpc",
         "upb_base_lib",
         "upb_descriptor_lib",
@@ -4146,8 +4148,6 @@ static_library("grpc++"):
         "crypto",
         "ssl",
         "zlibstatic",
-        "address_sorting",
-        "gpr",
     ]
 
 static_library("hash"):
