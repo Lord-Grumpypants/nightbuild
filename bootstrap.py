@@ -173,6 +173,28 @@ def main():
             f"error: {nightbuild} was not produced by make"
         )
 
+    archive = ROOT / "libxxhash.a"
+
+    print("Checking PGO dependency archive:")
+    print(f"  exists: {archive.exists()}")
+
+    if archive.exists():
+        run("file", str(archive), cwd=ROOT)
+        run("nm", "-gU", str(archive), cwd=ROOT)
+
+    archive.unlink(missing_ok=True)
+
+    run(
+        str(nightbuild),
+        "build",
+        "-C",
+        str(PGO_BUILD_DIR),
+        "nightbuild-pgo",
+        "--no-license",
+        cwd=ROOT,
+        env=env,
+    )
+
     run(
         str(nightbuild),
         "gen",
@@ -197,7 +219,7 @@ def main():
     run("file", str(ROOT / "libxxhash.a"), cwd=ROOT)
     run("ar", "-t", str(ROOT / "libxxhash.a"), cwd=ROOT)
     run("nm", "-gU", str(ROOT / "libxxhash.a"), cwd=ROOT)
-    
+
     python = shutil.which(
         "python3.14",
         path=env["PATH"],
