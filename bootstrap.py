@@ -194,6 +194,10 @@ def main():
         env=env,
     )
 
+    run("file", str(ROOT / "libxxhash.a"), cwd=ROOT)
+    run("ar", "-t", str(ROOT / "libxxhash.a"), cwd=ROOT)
+    run("nm", "-gU", str(ROOT / "libxxhash.a"), cwd=ROOT)
+    
     python = shutil.which(
         "python3.14",
         path=env["PATH"],
