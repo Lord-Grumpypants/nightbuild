@@ -6297,6 +6297,21 @@ int build(
             command_target) != targets.end();
     };
 
+    // Normalize artifact paths so producer registration and lookup
+    // agree regardless of relative paths or lexical path components.
+    auto artifact_key = [](const std::string &value) {
+        fs::path path(value);
+
+        if (path.is_relative()) {
+            std::error_code error;
+            fs::path absolute = fs::absolute(path, error);
+            if (!error)
+                path = std::move(absolute);
+        }
+
+        return path.lexically_normal().string();
+    };
+
     // Map every produced artifact to the command that produces it.
     std::unordered_map<std::string, size_t> producers;
 
@@ -6313,7 +6328,7 @@ int build(
                     database.arguments[command.outputs_offset + j];
                 std::string output = database_string_copy(database, offset);
                 if (!output.empty())
-                    producers.emplace(std::move(output), static_cast<size_t>(i));
+                    producers.emplace(artifact_key(output), static_cast<size_t>(i));
             }
         } else if (command.output_path_offset != 0) {
             std::string output = database_string_copy(
@@ -6377,7 +6392,7 @@ int build(
                     argument_offset);
 
             auto producer =
-                producers.find(argument);
+                producers.find(artifact_key(argument));
 
             if (producer == producers.end())
                 continue;
