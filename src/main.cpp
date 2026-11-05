@@ -1,6 +1,7 @@
 #include "toml.hpp"
 #include <signal.h>
 #include <poll.h>
+#include <sys/event.h>
 #include "cli.hpp"
 #include <string_view>
 #include "scheduler.hpp"
@@ -37,6 +38,7 @@
 #include <spawn.h>
 #include <pthread/qos.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <vector>
 
@@ -641,6 +643,168 @@ ProcessResult run_capture_text(
 
     return result;
 }
+
+
+std::vector<std::string> parse_clang_command_line(
+    const std::string &line) {
+
+    std::vector<std::string> result;
+
+    size_t i = 0;
+
+    while (i < line.size()) {
+
+        while (i < line.size() &&
+               std::isspace(
+                   static_cast<unsigned char>(line[i]))) {
+            ++i;
+        }
+
+        if (i == line.size())
+            break;
+
+        std::string argument;
+
+        if (line[i] == '"') {
+
+            ++i;
+
+            bool closed = false;
+
+            while (i < line.size()) {
+
+                char c = line[i++];
+
+                if (c == '"') {
+                    closed = true;
+                    break;
+                }
+
+                if (c == '\\') {
+
+                    if (i == line.size()) {
+                        argument.push_back(c);
+                        break;
+                    }
+
+                    argument.push_back(line[i++]);
+                    continue;
+                }
+
+                argument.push_back(c);
+            }
+
+            if (!closed)
+                fail("unterminated quoted argument in Clang -### output");
+
+        } else {
+
+            while (i < line.size() &&
+                   !std::isspace(
+                       static_cast<unsigned char>(line[i]))) {
+
+                argument.push_back(line[i++]);
+            }
+        }
+
+        result.push_back(std::move(argument));
+    }
+
+    return result;
+}
+
+
+std::vector<std::string> resolve_lld_link_command(
+    const std::vector<std::string> &clang_command) {
+
+    if (clang_command.empty())
+        fail("cannot resolve an empty Clang link command");
+
+    std::vector<std::string> dry_run = clang_command;
+
+    // Explicitly select LLVM's Mach-O linker.
+    dry_run.push_back("-fuse-ld=lld");
+
+    // Ask Clang to print the exact linker invocation without executing it.
+    dry_run.push_back("-###");
+
+    // Clang requires object inputs to exist even for a -### dry run.
+    // Create empty placeholders only for missing object files.
+    std::vector<fs::path> temporary_objects;
+
+    for (const std::string &argument : dry_run) {
+        const fs::path candidate(argument);
+
+        if (candidate.extension() != ".o" ||
+            fs::exists(candidate)) {
+            continue;
+        }
+
+        std::error_code error;
+        if (!candidate.parent_path().empty()) {
+            fs::create_directories(candidate.parent_path(), error);
+            if (error)
+                fail("could not create temporary object directory: " +
+                     candidate.parent_path().string());
+        }
+
+        const int fd = ::open(
+            candidate.c_str(),
+            O_WRONLY | O_CREAT | O_EXCL,
+            0600);
+
+        if (fd < 0) {
+            // Another process may have created it in the meantime.
+            if (errno == EEXIST)
+                continue;
+
+            fail("could not create temporary object placeholder: " +
+                 candidate.string());
+        }
+
+        ::close(fd);
+        temporary_objects.push_back(candidate);
+    }
+
+    ProcessResult result = run_capture_text(dry_run);
+
+    // Remove only the placeholders created above.
+    for (const fs::path &placeholder : temporary_objects) {
+        std::error_code error;
+        fs::remove(placeholder, error);
+    }
+
+    std::istringstream lines(result.output);
+    std::string line;
+
+    while (std::getline(lines, line)) {
+
+        auto arguments =
+            parse_clang_command_line(line);
+
+        if (arguments.empty())
+            continue;
+
+        const std::string executable =
+            fs::path(arguments.front()).filename().string();
+
+        // We specifically want the Mach-O LLD linker, not Apple's ld.
+        if (executable != "ld64.lld" &&
+            executable != "ld.lld") {
+            continue;
+        }
+
+        return arguments;
+    }
+
+    fail(
+        "Clang did not report an LLD linker invocation.\n"
+        "Make sure Homebrew LLVM provides ld64.lld and supports "
+        "-fuse-ld=lld.\n"
+        "Clang -### output:\n" +
+        result.output);
+}
+
 
 std::string xxh3_hex(XXH64_hash_t value) {
     std::ostringstream result;
@@ -4303,6 +4467,30 @@ std::vector<BuildRecord> make_build_records(
         return records;
     }
 
+    // Resolve the configured C++ driver's final linker invocation
+    // once during generation. Build execution will invoke ld64.lld
+    // directly, without launching the Clang driver.
+    if (type != OutputType::StaticLib) {
+
+        auto cxx_toolchain = std::find_if(
+            toolchains.begin(),
+            toolchains.end(),
+            [](const Toolchain &toolchain) {
+                return toolchain.extension == ".cpp";
+            });
+
+        if (cxx_toolchain == toolchains.end())
+            fail("no C++ toolchain available for linker resolution");
+
+        if (cxx_toolchain->compiler.empty())
+            fail("configured C++ toolchain has no compiler");
+
+        link.argv[0] = cxx_toolchain->compiler;
+
+        link.argv =
+            resolve_lld_link_command(link.argv);
+    }
+
     link.input_hash =
         make_input_hash(
             link_inputs);
@@ -5490,6 +5678,95 @@ int compile_parallel_mapped(
     std::vector<Running> running;
     running.reserve(max_jobs);
 
+    struct KqueueHandle {
+        int fd = kqueue();
+
+        ~KqueueHandle() {
+            if (fd >= 0)
+                close(fd);
+        }
+    } event_queue;
+
+    if (event_queue.fd < 0) {
+        clear_status();
+        std::perror("kqueue");
+        return 1;
+    }
+
+    auto add_event = [&](uintptr_t ident,
+                         int16_t filter,
+                         uint16_t flags,
+                         uint32_t fflags) -> bool {
+        struct kevent change;
+        EV_SET(
+            &change,
+            ident,
+            filter,
+            flags,
+            fflags,
+            0,
+            nullptr
+        );
+
+        return kevent(
+            event_queue.fd,
+            &change,
+            1,
+            nullptr,
+            0,
+            nullptr
+        ) == 0;
+    };
+
+    auto delete_event = [&](uintptr_t ident, int16_t filter) {
+        struct kevent change;
+        EV_SET(
+            &change,
+            ident,
+            filter,
+            EV_DELETE,
+            0,
+            0,
+            nullptr
+        );
+
+        if (kevent(
+                event_queue.fd,
+                &change,
+                1,
+                nullptr,
+                0,
+                nullptr
+            ) < 0 && errno != ENOENT) {
+            return false;
+        }
+
+        return true;
+    };
+
+    auto terminate_running = [&]() {
+        for (auto &entry : running) {
+            if (!entry.exited)
+                kill(entry.pid, SIGTERM);
+        }
+
+        for (auto &entry : running) {
+            if (!entry.exited) {
+                pid_t waited;
+                do {
+                    waited = waitpid(entry.pid, nullptr, 0);
+                } while (waited < 0 && errno == EINTR);
+            }
+
+            if (entry.output_fd >= 0) {
+                close(entry.output_fd);
+                entry.output_fd = -1;
+            }
+        }
+    };
+
+    std::vector<struct kevent> events(max_jobs * 2);
+
     size_t completed = 0;
 
     auto finish_success = [&](Running &entry) {
@@ -5589,7 +5866,17 @@ int compile_parallel_mapped(
             }
 
             posix_spawn_file_actions_t actions;
-            int spawn_error = posix_spawn_file_actions_init(&actions);
+            int spawn_error =
+                posix_spawn_file_actions_init(&actions);
+
+            if (spawn_error != 0) {
+                close(pipe_fds[0]);
+                close(pipe_fds[1]);
+                clear_status();
+                errno = spawn_error;
+                std::perror("posix_spawn_file_actions_init");
+                return 1;
+            }
 
             if (spawn_error == 0)
                 spawn_error = posix_spawn_file_actions_adddup2(
@@ -5636,17 +5923,16 @@ int compile_parallel_mapped(
                 return 1;
             }
 
-            const int flags = fcntl(pipe_fds[0], F_GETFL);
+            int nonblocking = 1;
 
-            if (flags < 0 ||
-                fcntl(pipe_fds[0], F_SETFL, flags | O_NONBLOCK) < 0) {
+            if (ioctl(pipe_fds[0], FIONBIO, &nonblocking) < 0) {
                 const int saved_errno = errno;
                 close(pipe_fds[0]);
                 kill(pid, SIGTERM);
                 waitpid(pid, nullptr, 0);
                 clear_status();
                 errno = saved_errno;
-                std::perror("fcntl");
+                std::perror("ioctl(FIONBIO)");
                 return 1;
             }
 
@@ -5657,6 +5943,34 @@ int compile_parallel_mapped(
                 start_time,
                 pipe_fds[0]
             });
+
+            Running &spawned = running.back();
+
+            if (!add_event(
+                    static_cast<uintptr_t>(spawned.pid),
+                    EVFILT_PROC,
+                    EV_ADD | EV_ENABLE | EV_ONESHOT,
+                    NOTE_EXIT) ||
+                !add_event(
+                    static_cast<uintptr_t>(spawned.output_fd),
+                    EVFILT_READ,
+                    EV_ADD | EV_ENABLE,
+                    0)) {
+                const int saved_errno = errno;
+
+                delete_event(
+                    static_cast<uintptr_t>(spawned.pid),
+                    EVFILT_PROC);
+                delete_event(
+                    static_cast<uintptr_t>(spawned.output_fd),
+                    EVFILT_READ);
+
+                terminate_running();
+                clear_status();
+                errno = saved_errno;
+                std::perror("kevent registration");
+                return 1;
+            }
 
             show_status(
                 std::to_string(completed) + "/" +
@@ -5675,53 +5989,82 @@ int compile_parallel_mapped(
             return 1;
         }
 
-        std::vector<pollfd> poll_fds;
-        std::vector<size_t> poll_indices;
+        const int event_count = kevent(
+            event_queue.fd,
+            nullptr,
+            0,
+            events.data(),
+            static_cast<int>(events.size()),
+            nullptr
+        );
 
-        for (size_t i = 0; i < running.size(); ++i) {
-            if (running[i].eof)
+        if (event_count < 0) {
+            if (errno == EINTR)
                 continue;
 
-            poll_fds.push_back({
-                running[i].output_fd,
-                static_cast<short>(POLLIN | POLLHUP | POLLERR),
-                0
-            });
-            poll_indices.push_back(i);
-        }
-
-        const int poll_result = poll(
-            poll_fds.data(),
-            static_cast<nfds_t>(poll_fds.size()),
-            50);
-
-        if (poll_result < 0 && errno != EINTR) {
+            const int saved_errno = errno;
+            terminate_running();
             clear_status();
-            std::perror("poll");
+            errno = saved_errno;
+            std::perror("kevent");
             return 1;
         }
 
-        if (poll_result > 0) {
-            for (size_t p = 0; p < poll_fds.size(); ++p) {
-                if (poll_fds[p].revents == 0)
+        for (int event_index = 0;
+             event_index < event_count;
+             ++event_index) {
+            const struct kevent &event =
+                events[static_cast<size_t>(event_index)];
+
+            if ((event.flags & EV_ERROR) && event.data != 0) {
+                terminate_running();
+                clear_status();
+                errno = static_cast<int>(event.data);
+                std::perror("kevent event");
+                return 1;
+            }
+
+            if (event.filter == EVFILT_READ) {
+                auto found = std::find_if(
+                    running.begin(),
+                    running.end(),
+                    [&](const Running &entry) {
+                        return !entry.eof &&
+                            entry.output_fd ==
+                                static_cast<int>(event.ident);
+                    }
+                );
+
+                if (found == running.end())
                     continue;
 
-                Running &entry = running[poll_indices[p]];
+                Running &entry = *found;
                 char buffer[16384];
 
                 for (;;) {
                     const ssize_t count = read(
-                        entry.output_fd, buffer, sizeof(buffer));
+                        entry.output_fd,
+                        buffer,
+                        sizeof(buffer)
+                    );
 
                     if (count > 0) {
                         entry.pending_output.append(
-                            buffer, static_cast<size_t>(count));
+                            buffer,
+                            static_cast<size_t>(count)
+                        );
                         drain_lines(entry, false);
                         continue;
                     }
 
                     if (count == 0) {
                         entry.eof = true;
+
+                        delete_event(
+                            static_cast<uintptr_t>(entry.output_fd),
+                            EVFILT_READ
+                        );
+
                         close(entry.output_fd);
                         entry.output_fd = -1;
                         drain_lines(entry, true);
@@ -5730,6 +6073,12 @@ int compile_parallel_mapped(
                     } else if (errno != EAGAIN &&
                                errno != EWOULDBLOCK) {
                         entry.eof = true;
+
+                        delete_event(
+                            static_cast<uintptr_t>(entry.output_fd),
+                            EVFILT_READ
+                        );
+
                         close(entry.output_fd);
                         entry.output_fd = -1;
                         drain_lines(entry, true);
@@ -5737,23 +6086,42 @@ int compile_parallel_mapped(
 
                     break;
                 }
-            }
-        }
+            } else if (event.filter == EVFILT_PROC) {
+                auto found = std::find_if(
+                    running.begin(),
+                    running.end(),
+                    [&](const Running &entry) {
+                        return !entry.exited &&
+                            entry.pid ==
+                                static_cast<pid_t>(event.ident);
+                    }
+                );
 
-        for (auto &entry : running) {
-            if (entry.exited)
-                continue;
+                if (found == running.end())
+                    continue;
 
-            int status = 0;
-            const pid_t result = waitpid(entry.pid, &status, WNOHANG);
+                Running &entry = *found;
 
-            if (result == entry.pid) {
+                int status = 0;
+                pid_t waited;
+
+                do {
+                    waited = waitpid(entry.pid, &status, 0);
+                } while (waited < 0 && errno == EINTR);
+
+                if (waited != entry.pid) {
+                    const int saved_errno =
+                        waited < 0 ? errno : ECHILD;
+
+                    terminate_running();
+                    clear_status();
+                    errno = saved_errno;
+                    std::perror("waitpid after NOTE_EXIT");
+                    return 1;
+                }
+
                 entry.exited = true;
                 entry.status = status;
-            } else if (result < 0 && errno != EINTR) {
-                clear_status();
-                std::perror("waitpid");
-                return 1;
             }
         }
 
