@@ -2,7 +2,7 @@ cxx = /opt/homebrew/opt/llvm/bin/clang++
 objcxx = /opt/homebrew/opt/llvm/bin/clang++
 cflags = -std=c++23 -O3 -march=native -mtune=native -flto=full -fstrict-aliasing -fomit-frame-pointer -fwhole-program-vtables -fvirtual-function-elimination -fstrict-vtable-pointers -fprofile-instr-use=../nightbuild.profdata -Wno-profile-instr-unprofiled -Iinclude -I../third_party/xxhash
 objcxxflags = -std=c++23 -O3 -fno-objc-msgsend-class-selector-stubs -Iinclude
-ldflags = -flto=full -fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld -Wl,--icf=safe
+ldflags = -flto=full -fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld -Wl,--icf=safe -Wl,-dead_strip
 libs = -framework CoreServices -framework AppKit
 
 rule cxx
