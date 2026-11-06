@@ -6259,9 +6259,10 @@ int build(
     // std::cout << meow << std::endl;
     BuildPaths paths =
         make_paths(build_dir);
-    
-        
 
+    if (nightbuild_ensure_watcher_daemon(
+            nightbuild_executable_path.c_str(), paths.root.c_str()) != 0)
+        fail("could not start the NightBuild watcher daemon");
 
     fs::path manifest =
         paths.root /
@@ -6972,10 +6973,6 @@ void clobber(
 {
     BuildPaths paths =
         make_paths(build_dir);
-
-    if (nightbuild_ensure_watcher_daemon(
-            nightbuild_executable_path.c_str(), paths.root.c_str()) != 0)
-        fail("could not start the NightBuild watcher daemon");
 
     fs::path manifest =
         paths.root /
