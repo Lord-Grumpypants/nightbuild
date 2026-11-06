@@ -21,7 +21,8 @@ CXX_SOURCES := \
 	src/compile_commands.cpp
 
 OBJCXX_SOURCES := \
-	src/ui/license_window.mm
+	src/ui/license_window.mm \
+	watcher/launcher.mm
 
 C_SOURCES := \
 	$(XXHASH_DIR)/xxhash.c
