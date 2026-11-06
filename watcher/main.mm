@@ -56,6 +56,10 @@ void send_reply(xpc_connection_t connection, xpc_object_t message) {
         xpc_dictionary_set_string(reply, "error", "missing command");
     } else if (std::string(command) == "ping") {
         xpc_dictionary_set_bool(reply, "running", true);
+        auto *state = static_cast<WatcherState *>(
+            xpc_connection_get_context(connection));
+        if (state != nullptr)
+            xpc_dictionary_set_string(reply, "root", state->root.c_str());
     } else if (std::string(command) == "take_dirty") {
         auto *state = static_cast<WatcherState *>(
             xpc_connection_get_context(connection));
