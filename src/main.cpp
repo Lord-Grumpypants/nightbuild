@@ -794,6 +794,32 @@ std::vector<std::string> resolve_lld_link_command(
             continue;
         }
 
+        // Clang's -### dry run may omit archive inputs that do not
+        // exist yet during generation. Preserve every declared static
+        // archive input in the final direct-LLD command; those archives are
+        // built by the dependency graph before this link command executes.
+        std::vector<std::string> missing_archives;
+        for (const std::string &input : clang_command) {
+            if (fs::path(input).extension() != ".a")
+                continue;
+
+            const bool present = std::any_of(
+                arguments.begin(), arguments.end(),
+                [&](const std::string &argument) {
+                    return argument == input;
+                });
+
+            if (!present)
+                missing_archives.push_back(input);
+        }
+
+        if (!missing_archives.empty()) {
+            const auto output = std::find(
+                arguments.begin(), arguments.end(), "-o");
+            arguments.insert(output, missing_archives.begin(),
+                             missing_archives.end());
+        }
+
         return arguments;
     }
 
