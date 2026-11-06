@@ -9,6 +9,9 @@ static_library("xxhash"):
         "-std=c11",
         "-O3",
         "-march=native",
+        "-mtune=native",
+        "-fstrict-aliasing",
+        "-fomit-frame-pointer",
     ]
 
     if debug:
