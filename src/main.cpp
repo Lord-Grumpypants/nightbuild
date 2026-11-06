@@ -6334,7 +6334,7 @@ int build(
             std::string output = database_string_copy(
                 database, command.output_path_offset);
             if (!output.empty())
-                producers.emplace(std::move(output), static_cast<size_t>(i));
+                producers.emplace(artifact_key(output), static_cast<size_t>(i));
         }
     }
 
