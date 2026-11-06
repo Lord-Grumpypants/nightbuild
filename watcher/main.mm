@@ -2,7 +2,9 @@
 #include <dispatch/dispatch.h>
 #include <xpc/xpc.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <vector>
 #include <filesystem>
 #include <mutex>
 #include <stdexcept>
@@ -54,29 +56,32 @@ void send_reply(xpc_connection_t connection, xpc_object_t message) {
         xpc_dictionary_set_string(reply, "error", "missing command");
     } else if (std::string(command) == "ping") {
         xpc_dictionary_set_bool(reply, "running", true);
-    } else if (std::string(command) == "get_dirty") {
-        xpc_object_t paths = xpc_array_create(nullptr, 0);
+    } else if (std::string(command) == "take_dirty") {
         auto *state = static_cast<WatcherState *>(
             xpc_connection_get_context(connection));
+        xpc_object_t paths = xpc_array_create(nullptr, 0);
 
         if (state != nullptr) {
-            std::lock_guard lock(state->mutex);
-            for (const std::string &path : state->dirty_paths) {
+            std::vector<std::string> snapshot;
+            {
+                std::lock_guard lock(state->mutex);
+                snapshot.reserve(state->dirty_paths.size());
+                for (const std::string &path : state->dirty_paths)
+                    snapshot.push_back(path);
+                state->dirty_paths.clear();
+            }
+
+            std::sort(snapshot.begin(), snapshot.end());
+            for (const std::string &path : snapshot) {
                 xpc_object_t value = xpc_string_create(path.c_str());
                 xpc_array_append_value(paths, value);
                 xpc_release(value);
             }
         }
+
         xpc_dictionary_set_value(reply, "paths", paths);
+        xpc_dictionary_set_uint64(reply, "count", xpc_array_get_count(paths));
         xpc_release(paths);
-    } else if (std::string(command) == "ack_dirty") {
-        auto *state = static_cast<WatcherState *>(
-            xpc_connection_get_context(connection));
-        if (state != nullptr) {
-            std::lock_guard lock(state->mutex);
-            state->dirty_paths.clear();
-        }
-        xpc_dictionary_set_bool(reply, "acknowledged", true);
     } else {
         xpc_dictionary_set_string(reply, "error", "unknown command");
     }
