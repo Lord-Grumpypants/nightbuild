@@ -269,6 +269,20 @@ void Scheduler::build_graph()
     producers.reserve(
         count * 2);
 
+    // Producer registration and argument lookup must use the same
+    // canonical representation. Commands may contain either relative
+    // or absolute spellings of the same artifact path.
+    const auto artifact_key = [](const std::string &value) {
+        fs::path path(value);
+        if (path.is_relative()) {
+            std::error_code error;
+            fs::path absolute = fs::absolute(path, error);
+            if (!error)
+                path = std::move(absolute);
+        }
+        return path.lexically_normal().string();
+    };
+
     for (std::size_t i = 0;
          i < count;
          ++i) {
@@ -282,13 +296,13 @@ void Scheduler::build_graph()
                     database.arguments[command.outputs_offset + j];
                 const std::string output = mutable_string(database, offset);
                 if (!output.empty())
-                    producers.emplace(output, i);
+                    producers.emplace(artifact_key(output), i);
             }
         } else {
             const std::string output =
                 mutable_string(database, command.output_path_offset);
             if (!output.empty())
-                producers.emplace(output, i);
+                producers.emplace(artifact_key(output), i);
         }
     }
 
@@ -330,7 +344,7 @@ void Scheduler::build_graph()
                 continue;
 
             const auto producer =
-                producers.find(argument);
+                producers.find(artifact_key(argument));
 
             if (producer == producers.end())
                 continue;
