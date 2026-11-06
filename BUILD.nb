@@ -2,6 +2,7 @@ project("NightBuild")
 
 default = [
     "nightbuild",
+    "nightbuild-watcher",
     "test",
 ]
 
@@ -25,6 +26,7 @@ executable("nightbuild"):
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
         "src/ui/license_window.mm",
+        "watcher/launcher.mm",
     ]
 
     include_dirs = [
@@ -90,6 +92,7 @@ executable("nightbuild-pgo"):
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
         "src/ui/license_window.mm",
+        "watcher/launcher.mm",
     ]
 
 
@@ -151,6 +154,7 @@ executable("nightbuild-release"):
         "src/fsevents.cpp",
         "src/compile_commands.cpp",
         "src/ui/license_window.mm",
+        "watcher/launcher.mm",
     ]
 
     include_dirs = [
@@ -192,6 +196,33 @@ executable("nightbuild-release"):
     ]
 
     deps = ["xxhash"]
+
+executable("nightbuild-watcher"):
+    toolchain_include = [
+        "toolchains/OBJCXX.json",
+        "toolchains/CXX.json",
+    ]
+
+    sources = [
+        "watcher/main.mm",
+    ]
+
+    objcxxflags = [
+        "-std=c++23",
+        "-O3",
+    ]
+
+    cxxflags = [
+        "-std=c++23",
+        "-O3",
+        "-fno-rtti",
+        "-fno-unwind-tables",
+    ]
+
+    frameworks = [
+        "CoreServices",
+    ]
+
 
 executable("test"):
     toolchain_include = [

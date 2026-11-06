@@ -7158,6 +7158,8 @@ void print_version()
 extern "C" int nightbuild_license_is_accepted(void);
 extern "C" int nightbuild_show_license_window(void);
 
+int nightbuild_start_watcher_daemon(const char *executable_path);
+
 int main(
     int argc,
     char **argv)
@@ -7175,6 +7177,9 @@ int main(
     }
     argc = write_arg;
     argv[argc] = nullptr;
+
+    if (argc == 2 && std::string_view(argv[1]) == "--daemon")
+        return nightbuild_start_watcher_daemon(argv[0]);
 
     if (argc > 1) {
         const std::string_view command(argv[1]);
