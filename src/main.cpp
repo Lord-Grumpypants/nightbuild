@@ -6281,20 +6281,49 @@ int build(
      * the requested targets are considered.
      */
     
+    // Resolve target dependencies explicitly before selecting commands.
+    // Artifact/argv matching remains useful for file-level dependencies,
+    // but it must not be the only mechanism for target dependencies: linker
+    // command rewriting can change how dependency artifacts are spelled.
+    const toml::Project project =
+        toml::parse_file(manifest.string(), paths.build);
+
+    std::unordered_set<std::string> selected_targets;
+    if (targets.empty()) {
+        for (const auto &[name, target] : project.targets) {
+            (void)target;
+            selected_targets.insert(name);
+        }
+    } else {
+        std::vector<std::string> target_pending = targets;
+        while (!target_pending.empty()) {
+            std::string name = std::move(target_pending.back());
+            target_pending.pop_back();
+
+            if (!selected_targets.insert(name).second)
+                continue;
+
+            const auto found = project.targets.find(name);
+            if (found == project.targets.end())
+                fail("unknown target '" + name + "'");
+
+            const toml::Target &target = found->second;
+            target_pending.insert(
+                target_pending.end(),
+                target.dependencies.begin(),
+                target.dependencies.end());
+            target_pending.insert(
+                target_pending.end(),
+                target.generator_deps.begin(),
+                target.generator_deps.end());
+        }
+    }
+
     auto selected = [&](const CommandDatabase &db,
-                    const CommandRecord &command) {
-        if (targets.empty())
-            return true;
-
-        std::string command_target =
-            database_string_copy(
-                db,
-                command.target_name_offset);
-
-        return std::find(
-            targets.begin(),
-            targets.end(),
-            command_target) != targets.end();
+                        const CommandRecord &command) {
+        const std::string command_target =
+            database_string_copy(db, command.target_name_offset);
+        return selected_targets.contains(command_target);
     };
 
     // Normalize artifact paths so producer registration and lookup
