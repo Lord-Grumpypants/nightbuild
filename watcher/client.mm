@@ -92,9 +92,9 @@ int main(int argc, char **argv) {
     if (!drain) {
         const bool running = xpc_dictionary_get_bool(reply, "running");
         const char *root = xpc_dictionary_get_string(reply, "root");
-        std::cout << "{\\"running\\":" << (running ? "true" : "false");
+        std::cout << "{\"running\":" << (running ? "true" : "false");
         if (root != nullptr)
-            std::cout << ",\\"root\\":\\"" << json_escape(root) << "\\"";
+            std::cout << ",\"root\":\"" << json_escape(root) << "\"";
         std::cout << "}\n";
         xpc_release(reply);
         return running ? 0 : 1;
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
             continue;
         if (i != 0)
             std::cout << ',';
-        std::cout << '\\"' << json_escape(path) << '\\"';
+        std::cout << '"' << json_escape(path) << '"';
     }
     std::cout << "]\n";
     xpc_release(reply);
