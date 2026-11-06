@@ -3,6 +3,7 @@ project("NightBuild")
 default = [
     "nightbuild",
     "nightbuild-watcher",
+    "nightbuild-watchctl",
     "test",
 ]
 
@@ -221,6 +222,29 @@ executable("nightbuild-watcher"):
 
     frameworks = [
         "CoreServices",
+    ]
+
+
+executable("nightbuild-watchctl"):
+    toolchain_include = [
+        "toolchains/OBJCXX.json",
+        "toolchains/CXX.json",
+    ]
+
+    sources = [
+        "watcher/client.mm",
+    ]
+
+    objcxxflags = [
+        "-std=c++23",
+        "-O3",
+    ]
+
+    cxxflags = [
+        "-std=c++23",
+        "-O3",
+        "-fno-rtti",
+        "-fno-unwind-tables",
     ]
 
 
