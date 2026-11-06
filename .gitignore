@@ -34,3 +34,6 @@ test
 .DS_Store
 
 make2nightbuild
+
+nightbuild-watcher
+nightbuild-watchctl

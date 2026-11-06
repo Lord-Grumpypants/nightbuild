@@ -1,4 +1,5 @@
 #include <mach-o/dyld.h>
+#include "xpc.hpp"
 
 #include <cerrno>
 #include <cstdlib>
@@ -84,7 +85,7 @@ fs::path executable_path(const char *argv0) {
 }
 } // namespace
 
-int nightbuild_start_watcher_daemon(const char *argv0) {
+int nightbuild_ensure_watcher_daemon(const char *argv0, const char *requested_root) {
     try {
         const fs::path nightbuild = executable_path(argv0);
         const fs::path watcher = nightbuild.parent_path() / "nightbuild-watcher";
@@ -96,7 +97,7 @@ int nightbuild_start_watcher_daemon(const char *argv0) {
         }
 
         std::error_code error;
-        const fs::path root = fs::canonical(fs::current_path(), error);
+        const fs::path root = fs::canonical(requested_root, error);
         if (error || !fs::is_directory(root)) {
             std::cerr << "nightbuild: could not resolve the current project directory\n";
             return 1;
@@ -144,6 +145,10 @@ int nightbuild_start_watcher_daemon(const char *argv0) {
         }
         fs::rename(temporary, plist);
 
+        std::string running_root;
+        if (nightbuild_watcher_ping(running_root) && running_root == root.string())
+            return 0;
+
         const std::string domain = "gui/" + std::to_string(getuid());
         const std::string service = domain + "/" + service_label;
         (void)run_launchctl({"launchctl", "bootout", domain, plist.string()});
@@ -157,10 +162,26 @@ int nightbuild_start_watcher_daemon(const char *argv0) {
             return 1;
         }
 
-        std::cout << "NightBuild watcher started for " << root << '\n';
-        return 0;
+        for (int attempt = 0; attempt < 40; ++attempt) {
+            running_root.clear();
+            if (nightbuild_watcher_ping(running_root) && running_root == root.string())
+                return 0;
+            usleep(50000);
+        }
+        std::cerr << "nightbuild: watcher did not become ready for " << root << '\n';
+        return 1;
     } catch (const std::exception &exception) {
         std::cerr << "nightbuild: " << exception.what() << '\n';
         return 1;
     }
+}
+
+int nightbuild_start_watcher_daemon(const char *argv0) {
+    std::error_code error;
+    const fs::path root = fs::canonical(fs::current_path(), error);
+    if (error) {
+        std::cerr << "nightbuild: could not resolve the current project directory\n";
+        return 1;
+    }
+    return nightbuild_ensure_watcher_daemon(argv0, root.c_str());
 }

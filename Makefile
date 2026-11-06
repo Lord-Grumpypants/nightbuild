@@ -17,18 +17,18 @@ CXX_SOURCES := \
 	src/cli.cpp \
 	src/toml.cpp \
 	src/scheduler.cpp \
-	src/fsevents.cpp \
 	src/compile_commands.cpp
 
 OBJCXX_SOURCES := \
 	src/ui/license_window.mm \
-	watcher/launcher.mm
+	watcher/launcher.mm \
+	watcher/xpc.mm
 
 C_SOURCES := \
 	$(XXHASH_DIR)/xxhash.c
 
 CXX_OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(CXX_SOURCES))
-OBJCXX_OBJECTS := $(patsubst src/%.mm,$(BUILD_DIR)/%.o,$(OBJCXX_SOURCES))
+OBJCXX_OBJECTS := $(patsubst src/%.mm,$(BUILD_DIR)/%.o,$(filter src/%.mm,$(OBJCXX_SOURCES))) $(patsubst watcher/%.mm,$(BUILD_DIR)/watcher/%.o,$(filter watcher/%.mm,$(OBJCXX_SOURCES)))
 C_OBJECTS := $(patsubst $(XXHASH_DIR)/%.c,$(BUILD_DIR)/xxhash/%.o,$(C_SOURCES))
 OBJECTS := $(CXX_OBJECTS) $(OBJCXX_OBJECTS) $(C_OBJECTS)
 DEPFILES := $(OBJECTS:.o=.d)
@@ -65,11 +65,19 @@ LDLIBS := -framework CoreServices -framework AppKit
 
 .PHONY: all clean rebuild
 
-all: $(TARGET)
+all: $(TARGET) nightbuild-watcher nightbuild-watchctl
 
 $(TARGET): $(CXX_OBJECTS) $(OBJCXX_OBJECTS) $(XXHASH_LIB)
 	@printf '  LINK    %s\n' "$@"
 	$(CXX) $(LDFLAGS) $(CXX_OBJECTS) $(OBJCXX_OBJECTS) $(XXHASH_LIB) $(LDLIBS) -o "$@"
+
+nightbuild-watcher: $(BUILD_DIR)/watcher/main.o
+	@printf '  LINK    %s\n' "$@"
+	$(OBJCXX) $(LDFLAGS) $^ -framework CoreServices -o "$@"
+
+nightbuild-watchctl: $(BUILD_DIR)/watcher/client.o
+	@printf '  LINK    %s\n' "$@"
+	$(OBJCXX) $(LDFLAGS) $^ -o "$@"
 
 $(BUILD_DIR)/%.o: src/%.cpp
 	@mkdir -p "$(@D)"
@@ -77,6 +85,11 @@ $(BUILD_DIR)/%.o: src/%.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c "$<" -o "$@"
 
 $(BUILD_DIR)/%.o: src/%.mm
+	@mkdir -p "$(@D)"
+	@printf '  OBJCXX  %s\n' "$<"
+	$(OBJCXX) $(CPPFLAGS) $(OBJCXXFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(BUILD_DIR)/watcher/%.o: watcher/%.mm
 	@mkdir -p "$(@D)"
 	@printf '  OBJCXX  %s\n' "$<"
 	$(OBJCXX) $(CPPFLAGS) $(OBJCXXFLAGS) -MMD -MP -c "$<" -o "$@"
@@ -96,6 +109,6 @@ rebuild: clean all
 
 clean:
 	@printf '  CLEAN   %s\n' "$(BUILD_DIR) $(TARGET)"
-	rm -rf "$(BUILD_DIR)" "$(TARGET)"
+	rm -rf "$(BUILD_DIR)" "$(TARGET)" nightbuild-watcher nightbuild-watchctl
 
 -include $(DEPFILES)

@@ -24,7 +24,7 @@ executable("nightbuild"):
         "src/cli.cpp",
         "src/toml.cpp",
         "src/scheduler.cpp",
-        "src/fsevents.cpp",
+        "watcher/xpc.mm",
         "src/compile_commands.cpp",
         "src/ui/license_window.mm",
         "watcher/launcher.mm",
@@ -71,7 +71,6 @@ executable("nightbuild"):
     libraries = []
 
     frameworks = [
-        "CoreServices",
         "AppKit",
     ]
 
@@ -90,7 +89,7 @@ executable("nightbuild-pgo"):
         "src/cli.cpp",
         "src/toml.cpp",
         "src/scheduler.cpp",
-        "src/fsevents.cpp",
+        "watcher/xpc.mm",
         "src/compile_commands.cpp",
         "src/ui/license_window.mm",
         "watcher/launcher.mm",
@@ -134,7 +133,6 @@ executable("nightbuild-pgo"):
     ]
 
     frameworks = [
-        "CoreServices",
         "AppKit",
     ]
 
@@ -152,7 +150,7 @@ executable("nightbuild-release"):
         "src/cli.cpp",
         "src/toml.cpp",
         "src/scheduler.cpp",
-        "src/fsevents.cpp",
+        "watcher/xpc.mm",
         "src/compile_commands.cpp",
         "src/ui/license_window.mm",
         "watcher/launcher.mm",
@@ -192,7 +190,6 @@ executable("nightbuild-release"):
     libraries = []
 
     frameworks = [
-        "CoreServices",
         "AppKit",
     ]
 

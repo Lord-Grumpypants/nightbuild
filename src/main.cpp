@@ -5,7 +5,7 @@
 #include "cli.hpp"
 #include <string_view>
 #include "scheduler.hpp"
-#include "fsevents.hpp"
+#include "../watcher/xpc.hpp"
 #include "command.hpp"
 #include "compile_commands.hpp"
 #include "xxhash.h"
@@ -43,6 +43,9 @@
 #include <vector>
 
 extern char **environ;
+
+static std::string nightbuild_executable_path;
+int nightbuild_ensure_watcher_daemon(const char *executable_path, const char *root);
 
 namespace fs = std::filesystem;
 
@@ -4684,8 +4687,6 @@ void generate(
     paths.root =
         fs::absolute(root);
 
-    FSEventsWatcher fsevents(paths.root);
-    fsevents.start();
 
     fs::path manifest =
         fs::absolute(root) /
@@ -6261,8 +6262,6 @@ int build(
     
         
 
-    FSEventsWatcher fsevents(paths.root);
-    fsevents.start();
 
     fs::path manifest =
         paths.root /
@@ -6543,7 +6542,7 @@ int build(
     std::vector<size_t> compile_indices;
 
     const std::vector<fs::path> changed_paths =
-        fsevents.drain();
+        nightbuild_watcher_drain();
 
     for (size_t index : required_commands) {
 
@@ -6959,8 +6958,6 @@ void clean(
     BuildPaths paths =
         make_paths(build_dir);
 
-    FSEventsWatcher fsevents(paths.root);
-    fsevents.start();
 
     std::error_code ec;
 
@@ -6976,8 +6973,9 @@ void clobber(
     BuildPaths paths =
         make_paths(build_dir);
 
-    FSEventsWatcher fsevents(paths.root);
-    fsevents.start();
+    if (nightbuild_ensure_watcher_daemon(
+            nightbuild_executable_path.c_str(), paths.root.c_str()) != 0)
+        fail("could not start the NightBuild watcher daemon");
 
     fs::path manifest =
         paths.root /
@@ -7164,6 +7162,7 @@ int main(
     int argc,
     char **argv)
 {
+    nightbuild_executable_path = argv[0];
     bool no_license = false;
     int write_arg = 1;
     for (int read_arg = 1; read_arg < argc; ++read_arg) {
