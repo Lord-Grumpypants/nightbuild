@@ -58,8 +58,7 @@ xpc_object_t send_command(const char *command) {
         return nullptr;
     }
     if (xpc_get_type(reply) == XPC_TYPE_ERROR) {
-        std::cerr << "nightbuild-watchctl: XPC request failed: "
-                  << xpc_dictionary_get_string(reply, "description") << '\n';
+        std::cerr << "nightbuild-watchctl: XPC request failed (watcher unavailable)\n";
         xpc_release(reply);
         return nullptr;
     }
